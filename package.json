@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "mongodb": "^2.2.12",
+    "react-quill": "^2.0.0",
+    "react-rnd": "^10.5.2"
+  }
+}

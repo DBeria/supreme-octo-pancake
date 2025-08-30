@@ -1,0 +1,12 @@
+# Ignore server-side security and config files
+/server/.env
+/server/certificate.pem
+/server/private.key
+/server/package-lock.json
+
+# Ignore client-side dependencies and config
+/client/node_modules/
+/client/package-lock.json
+
+# Ignore local build outputs
+/client/dist/
