@@ -10,7 +10,7 @@ export default defineConfig({
       '/api': {
         target: 'https://pocus-world-backend.onrender.com', // Your backend server address
         changeOrigin: true, // Recommended for virtual hosts
-        secure: true,      // Can be false if your backend is HTTP
+        secure: false,      // Can be false if your backend is HTTP
       },
     }
   }
