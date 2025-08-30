@@ -15,12 +15,24 @@ const UserSchema = new mongoose.Schema({
         type: String,
         required: [true, 'Please add an ID number'],
         unique: true,
-        match: [/^\\d{11}$/, 'Please add a valid 11-digit ID number']
+        // FIX: Replaced strict regex with a custom validator
+        validate: {
+            validator: function(v) {
+                return /^\d{11}$/.test(v);
+            },
+            message: props => `${props.value} is not a valid 11-digit ID number!`
+        }
     },
     mobileNumber: {
         type: String,
         required: false,
-        match: [/^\\d{9}$/, 'Please add a valid 9-digit mobile number']
+        // FIX: Replaced strict regex with a custom validator
+        validate: {
+            validator: function(v) {
+                return /^\d{9}$/.test(v);
+            },
+            message: props => `${props.value} is not a valid 9-digit mobile number!`
+        }
     },
     password: { type: String, required: true, select: false },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
