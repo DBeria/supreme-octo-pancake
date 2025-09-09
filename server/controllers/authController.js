@@ -159,7 +159,7 @@ exports.forgotPassword = async (req, res) => {
         if (!user) return res.status(404).json({ message: 'User not found' });
         const resetToken = user.getResetPasswordToken();
         await user.save({ validateBeforeSave: false });
-        const resetUrl = `http://localhost:5173/reset-password/${resetToken}`;
+        const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
         const message = `You are receiving this email because you requested a password reset. Please click the link to reset your password: ${resetUrl}`;
         await sendEmail({ email: user.email, subject: 'Password Reset', message });
         res.status(200).json({ message: 'Email sent' });
