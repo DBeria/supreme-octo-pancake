@@ -50,7 +50,6 @@ const progressSchema = new mongoose.Schema({
     timestamps: true,
 });
 
-// Ensure a user can only have one progress document per course
 progressSchema.index({ user: 1, course: 1 }, { unique: true });
 
 const Progress = mongoose.model('Progress', progressSchema);
