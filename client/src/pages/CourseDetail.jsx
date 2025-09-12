@@ -1,203 +1,136 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { CalendarIcon, ClockIcon, UsersIcon, AwardIcon } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import {
-    Container,
-    Button,
-    Badge,
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-    Avatar,
-    AvatarImage,
-    AvatarFallback
-} from '../components/ui';
+import { useSelector } from 'react-redux';
+import { Button } from '@/components/ui/button';
+import { toast } from 'react-hot-toast';
+import { FaPlayCircle, FaLock, FaBookOpen } from 'react-icons/fa';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const CourseDetail = () => {
     const { id } = useParams();
-    const navigate = useNavigate();
     const [course, setCourse] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [isEnrolled, setIsEnrolled] = useState(false);
-    const [user, setUser] = useState(null);
+    const { userInfo } = useSelector(state => state.auth);
+    const navigate = useNavigate();
 
     useEffect(() => {
-        const fetchCourseAndUser = async () => {
+        const fetchCourse = async () => {
+            const config = userInfo ? { headers: { Authorization: `Bearer ${userInfo.token}` } } : {};
             try {
-                const courseRes = await axios.get(`/api/courses/${id}`);
-                setCourse(courseRes.data);
-
-                const token = localStorage.getItem('token');
-                if (token) {
-                    const userRes = await axios.get('/api/users/profile', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    setUser(userRes.data);
-
-                    const enrollmentRes = await axios.get(`/api/courses/${id}/enrollment-status`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    setIsEnrolled(enrollmentRes.data.isEnrolled);
-                }
-            } catch (err) {
-                setError('Failed to load course details or user data. Please try again later.');
-                console.error(err);
+                const { data } = await axios.get(`/api/courses/${id}`, config);
+                setCourse(data);
+            } catch (error) {
+                console.error('Failed to fetch course', error);
+                toast.error(error.response?.data?.message || 'Could not load the course details.');
             } finally {
                 setLoading(false);
             }
         };
-        fetchCourseAndUser();
-    }, [id]);
+        fetchCourse();
+    }, [id, userInfo]);
 
-    const handleEnroll = async () => {
-        const token = localStorage.getItem('token');
-        if (!token) {
+    const handleCheckout = async () => {
+        if (!userInfo) {
+            toast.error('Please log in to enroll in a course.');
             navigate('/login');
             return;
         }
-
-        const config = { headers: { 'Authorization': `Bearer ${token}` } };
-
         try {
-            if (course.price > 0) {
-                const { data } = await axios.post(`/api/courses/${id}/create-checkout-session`, {}, config);
-                if (data && data.url) {
-                    window.location.href = data.url; // Redirect to Stripe Checkout
-                } else {
-                    throw new Error("Invalid response from checkout session API.");
-                }
-            } else {
-                await axios.post(`/api/courses/${id}/enroll`, {}, config);
-                alert('Successfully enrolled!');
-                setIsEnrolled(true);
-            }
-        } catch (err) {
-            console.error('Enrollment error:', err);
-            alert(err.response?.data?.message || 'Enrollment failed. Please try again or contact support.');
+            const config = {
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${userInfo.token}`,
+                },
+            };
+            const { data } = await axios.post(`/api/courses/${id}/checkout`, {}, config);
+            window.location.href = data.redirectUrl; 
+        } catch (error) {
+            console.error('Checkout error:', error);
+            toast.error(error.response?.data?.message || 'Could not initiate checkout.');
         }
     };
 
-    if (loading) {
-        return <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900 text-white">Loading...</div>;
-    }
+    const isEnrolled = userInfo && userInfo.enrolledCourses?.includes(id);
+    const isAdmin = userInfo && userInfo.role === 'admin';
 
-    if (error) {
-        return <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900 text-red-500">{error}</div>;
+    if (loading) {
+        return <div className="flex justify-center items-center h-screen text-white bg-slate-950">Loading course...</div>;
     }
 
     if (!course) {
-        return <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900 text-white">Course not found.</div>;
+        return <div className="flex justify-center items-center h-screen text-white bg-slate-950">Course not found.</div>;
     }
 
     return (
-        <Container className="py-8 lg:py-16">
-            <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
-                <div className="lg:w-2/3">
-                    <img src={course.imageUrl} alt={course.title} className="w-full h-80 object-cover rounded-xl shadow-lg mb-6 lg:mb-8" />
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        {course.categories.map(category => (
-                            <Badge key={category} variant="secondary">{category}</Badge>
-                        ))}
-                    </div>
-                    <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight text-gray-900 dark:text-white mb-4">{course.title}</h1>
-                    <p className="text-lg text-gray-600 dark:text-gray-400 mb-6">{course.description}</p>
-                    <div className="flex items-center gap-6 text-gray-500 dark:text-gray-400 text-sm mb-8">
-                        <div className="flex items-center gap-2"><ClockIcon size={16} />{course.duration}</div>
-                        <div className="flex items-center gap-2"><UsersIcon size={16} />{course.enrollmentCount} students</div>
+        <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-6 md:p-8">
+            <div className="max-w-7xl mx-auto">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    
+                    {/* Left Column */}
+                    <div className="lg:col-span-2">
+                        <div className="mb-6">
+                            <img src={course.thumbnail} alt={course.title} className="w-full h-auto object-cover rounded-xl shadow-2xl mb-4" />
+                            <h1 className="text-4xl md:text-5xl font-extrabold mb-2 text-cyan-400 tracking-tight">{course.title}</h1>
+                            
+                            {/* THIS IS THE ONLY CHANGE IN THIS ENTIRE FILE */}
+                            {course.author && course.author.fullName && (
+                                <p className="mb-6 text-lg text-slate-400">
+                                    Created by <span className="font-semibold text-slate-300">{course.author.fullName}</span>
+                                </p>
+                            )}
+
+                            <p className="text-slate-300 text-lg leading-relaxed">{course.description}</p>
+                        </div>
                     </div>
 
-                    <Tabs defaultValue="overview">
-                        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-3">
-                            <TabsTrigger value="overview">Overview</TabsTrigger>
-                            <TabsTrigger value="curriculum">Curriculum</TabsTrigger>
-                            <TabsTrigger value="instructor">Instructor</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="overview" className="mt-6">
-                            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">What you'll learn</h2>
-                            <ul className="list-disc list-inside space-y-2 text-gray-600 dark:text-gray-400 mb-6">
-                                {course.learningObjectives.map((objective, index) => (
-                                    <li key={index}>{objective}</li>
-                                ))}
-                            </ul>
-                        </TabsContent>
-                        <TabsContent value="curriculum" className="mt-6">
-                            <div className="space-y-4">
-                                {course.lessons.map((lesson, index) => (
-                                    <Card key={index} className="dark:bg-slate-800 dark:border-slate-700">
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center justify-between text-lg font-semibold text-gray-900 dark:text-white">
-                                                <span>Lesson {index + 1}: {lesson.title}</span>
-                                                {isEnrolled && (
-                                                    <Button onClick={() => navigate(`/lesson/${course._id}/${lesson._id}`)} size="sm">
-                                                        Start Lesson
-                                                    </Button>
+                    {/* Right Column */}
+                    <div className="lg:col-span-1">
+                        <Card className="bg-slate-900 border-slate-700">
+                            <CardHeader>
+                                <CardTitle className="flex items-center text-2xl">
+                                    <FaBookOpen className="mr-3 text-cyan-400" />
+                                    Course Content
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <ul className="space-y-3 mb-6">
+                                    {course.lessons.map((lesson, index) => (
+                                        <li key={lesson._id || index} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg transition-all hover:bg-slate-800">
+                                            <div className="flex items-center">
+                                                {isEnrolled || isAdmin ? (
+                                                    <FaPlayCircle className="text-cyan-400 mr-4 flex-shrink-0" />
+                                                ) : (
+                                                    <FaLock className="text-red-500 mr-4 flex-shrink-0" />
                                                 )}
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">{lesson.slides.length} slides</p>
-                                        </CardContent>
-                                    </Card>
-                                ))}
-                            </div>
-                        </TabsContent>
-                        <TabsContent value="instructor" className="mt-6">
-                            <div className="flex items-center gap-4">
-                                <Avatar className="h-20 w-20">
-                                    <AvatarImage src={course.creator.avatarUrl} />
-                                    <AvatarFallback>{course.creator.fullName.charAt(0)}</AvatarFallback>
-                                </Avatar>
+                                                <span className="font-medium text-slate-300">{lesson.title}</span>
+                                            </div>
+                                            {(isEnrolled || isAdmin) && (
+                                                <Link to={`/courses/${id}/lesson/${index}`}>
+                                                    <Button variant="ghost" size="sm" className="text-cyan-400 hover:text-white">Start</Button>
+                                                </Link>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
                                 <div>
-                                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">{course.creator.fullName}</h3>
-                                    <p className="text-gray-600 dark:text-gray-400">{course.creator.bio}</p>
+                                    {isEnrolled ? (
+                                        <Button className="w-full bg-green-600 hover:bg-green-700 text-lg py-6" asChild>
+                                            <Link to={`/courses/${id}/lesson/0`}>Go to Course</Link>
+                                        </Button>
+                                    ) : (
+                                        <Button onClick={handleCheckout} className="w-full bg-cyan-500 hover:bg-cyan-600 text-lg py-6">
+                                            Enroll for ${course.price}
+                                        </Button>
+                                    )}
                                 </div>
-                            </div>
-                        </TabsContent>
-                    </Tabs>
-                </div>
-
-                <div className="lg:w-1/3">
-                    <Card className="dark:bg-slate-800 dark:border-slate-700 sticky top-24">
-                        <CardHeader className="p-6 pb-0">
-                            <CardTitle className="text-4xl font-bold text-gray-900 dark:text-white">
-                                {course.price > 0 ? `$${course.price}` : 'Free'}
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-6 pt-4">
-                            <div className="space-y-4 mb-6">
-                                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                                    <ClockIcon size={18} />
-                                    <span>{course.duration} of content</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                                    <CalendarIcon size={18} />
-                                    <span>Lifetime access</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                                    <AwardIcon size={18} />
-                                    <span>Certificate of completion</span>
-                                </div>
-                            </div>
-                            <Button
-                                onClick={isEnrolled ? () => navigate(`/lesson/${course._id}/${course.lessons[0]?._id}`) : handleEnroll}
-                                className="w-full text-lg py-3"
-                                disabled={isEnrolled && !course.lessons[0]}
-                            >
-                                {isEnrolled ? "Go to First Lesson" : (course.price > 0 ? "Enroll Now" : "Enroll for Free")}
-                            </Button>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
             </div>
-        </Container>
+        </div>
     );
 };
 

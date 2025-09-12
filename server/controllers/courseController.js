@@ -2,426 +2,340 @@ const Course = require('../models/Course');
 const User = require('../models/User');
 const Author = require('../models/Author');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const crypto = require('crypto');
 
-// @desc    Create a new course
+// AWS S3 Configuration
+const s3Client = new S3Client({
+    region: process.env.AWS_REGION,
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    },
+});
+
+// Helper function to generate a unique file name
+const generateFileName = (bytes = 32) => crypto.randomBytes(bytes).toString('hex');
+
+// Helper function to get signed URLs for course content
+const getSignedUrlsForCourse = async (course) => {
+    if (course.thumbnail) {
+        const getObjectParams = {
+            Bucket: process.env.AWS_S3_BUCKET_NAME,
+            Key: course.thumbnail,
+        };
+        course.thumbnail = await getSignedUrl(s3Client, new GetObjectCommand(getObjectParams), { expiresIn: 3600 });
+    }
+
+    for (const lesson of course.lessons) {
+        for (const slide of lesson.slides) {
+            if ((slide.type === 'image' || slide.type === 'video') && slide.content) {
+                const getObjectParams = {
+                    Bucket: process.env.AWS_S3_BUCKET_NAME,
+                    Key: slide.content,
+                };
+                slide.content = await getSignedUrl(s3Client, new GetObjectCommand(getObjectParams), { expiresIn: 3600 });
+            }
+        }
+    }
+    return course;
+};
+
+
+// @desc    Get presigned URL for file upload
+// @route   POST /api/courses/get-presigned-url
+// @access  Private/Admin
+exports.getPresignedUrl = async (req, res) => {
+    const { fileType, fileExt } = req.body;
+    const fileName = generateFileName();
+    const key = `course-content/${fileName}.${fileExt}`;
+
+    const putObjectParams = {
+        Bucket: process.env.AWS_S3_BUCKET_NAME,
+        Key: key,
+        ContentType: fileType,
+    };
+
+    try {
+        const uploadUrl = await getSignedUrl(s3Client, new PutObjectCommand(putObjectParams), { expiresIn: 600 });
+        res.status(200).json({ uploadUrl, key });
+    } catch (error) {
+        console.error('Error generating presigned URL:', error);
+        res.status(500).json({ message: 'Could not generate upload URL.' });
+    }
+};
+
+// @desc    Create a course with content keys
 // @route   POST /api/courses
 // @access  Private/Admin
 exports.createCourse = async (req, res) => {
     try {
-        let author = await Author.findOne({ user: req.user.id });
+        const author = await Author.findOne({ user: req.user.id });
         if (!author) {
-            author = await Author.create({
-                user: req.user.id,
-                fullName: req.user.name,
-            });
+            return res.status(400).json({ message: 'Admin user does not have an author profile.' });
         }
-        
-        const { title, description, level, specialty, price, imageUrl, isPublic, instructorWelcomeNote, tags } = req.body;
-        
-        const course = new Course({
-            title,
-            description,
-            level,
-            specialty,
-            price,
-            imageUrl,
-            isPublic,
-            instructorWelcomeNote,
-            tags: tags || [],
-            creator: author._id,
-            lessons: [],
-        });
-        
+
+        const courseData = { ...req.body, author: author._id };
+        const course = new Course(courseData);
         const createdCourse = await course.save();
+
         res.status(201).json(createdCourse);
     } catch (error) {
-        console.error("Error creating course:", error);
-        res.status(500).json({ message: 'Server Error: Could not create the course.', error: error.message });
+        console.error('Error creating course:', error);
+        res.status(500).json({ message: 'Server Error', error: error.message });
     }
 };
 
-// @desc    Get all courses for admin view
-// @route   GET /api/courses/admin-courses
-// @access  Private/Admin
-exports.getAdminAllCourses = async (req, res) => {
-    try {
-        const courses = await Course.find({}).populate('creator', 'fullName');
-        res.json(courses);
-    } catch (error) {
-        res.status(500).json({ message: 'Server Error' });
-    }
-};
-
-// @desc    Get all public courses
-// @route   GET /api/courses
-// @access  Public
-exports.getAllCourses = async (req, res) => {
-    try {
-        const courses = await Course.find({ isPublic: true, status: 'active' }).populate('creator', 'fullName profilePicture');
-        res.json(courses);
-    } catch (error) {
-        res.status(500).json({ message: 'Server Error' });
-    }
-};
-
-// @desc    Get a single course by ID
-// @route   GET /api/courses/:id
-// @access  Public
-exports.getCourseById = async (req, res) => {
-    try {
-        const course = await Course.findById(req.params.id).populate('creator');
-        if (!course) {
-            return res.status(404).json({ message: 'Course not found' });
-        }
-        res.json(course);
-    } catch (error) {
-        res.status(500).json({ message: 'Server Error' });
-    }
-};
-
-// @desc    Update a course
+// @desc    Update a course with content keys
 // @route   PUT /api/courses/:id
 // @access  Private/Admin
 exports.updateCourse = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
+        const author = await Author.findOne({ user: req.user.id });
+
         if (!course) {
             return res.status(404).json({ message: 'Course not found' });
         }
-        
-        const {
-            title,
-            description,
-            level,
-            specialty,
-            price,
-            imageUrl,
-            isPublic,
-            lessons,
-            instructorWelcomeNote,
-            tags,
-        } = req.body;
 
-        course.title = title ?? course.title;
-        course.description = description ?? course.description;
-        course.level = level ?? course.level;
-        course.specialty = specialty ?? course.specialty;
-        course.price = price ?? course.price;
-        course.imageUrl = imageUrl ?? course.imageUrl;
-        course.instructorWelcomeNote = instructorWelcomeNote ?? course.instructorWelcomeNote;
-        
-        if (tags) {
-            course.tags = tags;
+        if (course.author.toString() !== author._id.toString()) {
+            return res.status(401).json({ message: 'User not authorized to update this course' });
         }
 
-        if (typeof isPublic === 'boolean') {
-            course.isPublic = isPublic;
-        }
+        // Logic to find and delete old S3 assets that are no longer in use
+        const oldAssetKeys = new Set();
+        if (course.thumbnail) oldAssetKeys.add(course.thumbnail);
+        course.lessons.forEach(lesson => {
+            lesson.slides.forEach(slide => {
+                if ((slide.type === 'image' || slide.type === 'video') && slide.content) {
+                    oldAssetKeys.add(slide.content);
+                }
+            });
+        });
 
-        course.lessons = lessons ?? course.lessons;
+        const newAssetKeys = new Set();
+        if (req.body.thumbnail) newAssetKeys.add(req.body.thumbnail);
+        req.body.lessons.forEach(lesson => {
+            lesson.slides.forEach(slide => {
+                if ((slide.type === 'image' || slide.type === 'video') && slide.content) {
+                    newAssetKeys.add(slide.content);
+                }
+            });
+        });
+
+        const keysToDelete = [...oldAssetKeys].filter(key => !newAssetKeys.has(key));
+        for (const key of keysToDelete) {
+            const deleteParams = { Bucket: process.env.AWS_S3_BUCKET_NAME, Key: key };
+            await s3Client.send(new DeleteObjectCommand(deleteParams));
+        }
+        
+        // Update course fields
+        course.title = req.body.title || course.title;
+        course.description = req.body.description || course.description;
+        course.thumbnail = req.body.thumbnail || course.thumbnail;
+        course.price = req.body.price || course.price;
+        course.lessons = req.body.lessons || course.lessons;
+        course.quiz = req.body.quiz || course.quiz;
 
         const updatedCourse = await course.save();
         res.json(updatedCourse);
+
     } catch (error) {
-        console.error("Error updating course:", error);
-        res.status(500).json({ message: 'Server Error: Could not save course.', error: error.message });
+        console.error('Error updating course:', error);
+        res.status(500).json({ message: 'Server Error', error: error.message });
     }
 };
 
-// @desc    Move a course to the recycle bin
+
+// @desc    Delete a course and its S3 assets
 // @route   DELETE /api/courses/:id
 // @access  Private/Admin
 exports.deleteCourse = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
+        const author = await Author.findOne({ user: req.user.id });
+
         if (!course) {
             return res.status(404).json({ message: 'Course not found' });
         }
-        course.status = 'deleted';
-        course.deletedAt = new Date();
-        await course.save();
-        res.json({ message: 'Course moved to recycle bin' });
+
+        if (course.author.toString() !== author._id.toString()) {
+            return res.status(401).json({ message: 'User not authorized to delete this course' });
+        }
+        
+        // Collect all S3 keys associated with the course
+        const keysToDelete = [];
+        if (course.thumbnail) {
+            keysToDelete.push(course.thumbnail);
+        }
+        course.lessons.forEach(lesson => {
+            lesson.slides.forEach(slide => {
+                if ((slide.type === 'image' || slide.type === 'video') && slide.content) {
+                    keysToDelete.push(slide.content);
+                }
+            });
+        });
+
+        // Delete all associated S3 objects
+        for (const key of keysToDelete) {
+            try {
+                const deleteParams = { Bucket: process.env.AWS_S3_BUCKET_NAME, Key: key };
+                await s3Client.send(new DeleteObjectCommand(deleteParams));
+            } catch (s3Error) {
+                // Log S3 deletion errors but don't block course deletion
+                console.error(`Failed to delete S3 object: ${key}`, s3Error);
+            }
+        }
+
+        await course.deleteOne();
+        res.json({ message: 'Course and associated content removed' });
+
     } catch (error) {
-        res.status(500).json({ message: 'Server Error' });
+        console.error('Error deleting course:', error);
+        res.status(500).json({ message: 'Server Error', error: error.message });
     }
 };
 
-// @desc    Restore a course from the recycle bin
-// @route   PUT /api/courses/:id/restore
-// @access  Private/Admin
-exports.restoreCourse = async (req, res) => {
+// @desc    Get all courses with signed URLs
+// @route   GET /api/courses
+// @access  Public
+exports.getAllCourses = async (req, res) => {
     try {
-        const course = await Course.findById(req.params.id);
-        if (!course) {
-            return res.status(404).json({ message: 'Course not found' });
-        }
-        course.status = 'active';
-        course.deletedAt = undefined;
-        await course.save();
-        res.json({ message: 'Course restored' });
+        const courses = await Course.find({}).populate('author', 'fullName').lean();
+        const coursesWithSignedUrls = await Promise.all(courses.map(getSignedUrlsForCourse));
+        res.json(coursesWithSignedUrls);
     } catch (error) {
+        console.error('Error getting all courses:', error);
         res.status(500).json({ message: 'Server Error' });
     }
 };
 
-// @desc    Permanently delete a course
-// @route   DELETE /api/courses/:id/permanent-delete
-// @access  Private/Admin
-exports.permanentlyDeleteCourse = async (req, res) => {
+// @desc    Get a single course by ID with signed URLs
+// @route   GET /api/courses/:id
+// @access  Public or Private (if enrolled)
+exports.getCourseById = async (req, res) => {
     try {
-        const course = await Course.findByIdAndDelete(req.params.id);
+        // THIS IS THE ONLY CHANGE IN THIS ENTIRE FILE.
+        const course = await Course.findById(req.params.id).populate('author', 'fullName').lean();
+
         if (!course) {
             return res.status(404).json({ message: 'Course not found' });
         }
-        res.json({ message: 'Course permanently deleted' });
+
+        // Check if the user is enrolled
+        const user = req.user ? await User.findById(req.user.id) : null;
+        const isEnrolled = user && user.enrolledCourses.includes(course._id.toString());
+        const isAdmin = user && user.role === 'admin';
+
+        // Only generate signed URLs for content if user is enrolled or is an admin
+        if (isEnrolled || isAdmin) {
+            const courseWithSignedUrls = await getSignedUrlsForCourse(course);
+            res.json(courseWithSignedUrls);
+        } else {
+            // If not enrolled, only return public data (like thumbnail)
+            if (course.thumbnail) {
+                const getObjectParams = {
+                    Bucket: process.env.AWS_S3_BUCKET_NAME,
+                    Key: course.thumbnail,
+                };
+                course.thumbnail = await getSignedUrl(s3Client, new GetObjectCommand(getObjectParams), { expiresIn: 3600 });
+            }
+            // Sanitize lessons content for non-enrolled users
+            course.lessons = course.lessons.map(lesson => ({
+                _id: lesson._id,
+                title: lesson.title,
+                // Do not expose slide content
+            }));
+            res.json(course);
+        }
     } catch (error) {
+        console.error("Error fetching course by ID:", error);
         res.status(500).json({ message: 'Server Error' });
     }
 };
 
-// @desc    Create a Stripe checkout session for a course
-// @route   POST /api/courses/:id/create-checkout-session
+
+// @desc    Create Stripe checkout session
+// @route   POST /api/courses/:id/checkout
 // @access  Private
 exports.createCheckoutSession = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
         const user = await User.findById(req.user.id);
-        
+
         if (!course) {
             return res.status(404).json({ message: 'Course not found' });
         }
 
-        if (user.enrolledCourses.some(e => e.course.toString() === course._id.toString())) {
-            return res.status(400).json({ message: 'User is already enrolled in this course.' });
+        if (user.enrolledCourses.includes(course._id)) {
+            return res.status(400).json({ message: 'You are already enrolled in this course.' });
         }
-        
+
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
-            line_items: [
-                {
-                    price_data: {
-                        currency: 'usd',
-                        product_data: {
-                            name: course.title,
-                            images: [course.imageUrl],
-                        },
-                        unit_amount: course.price * 100, // Stripe expects price in cents
+            line_items: [{
+                price_data: {
+                    currency: 'usd',
+                    product_data: {
+                        name: course.title,
+                        description: course.description,
                     },
-                    quantity: 1,
+                    unit_amount: course.price * 100, // Price in cents
                 },
-            ],
+                quantity: 1,
+            }],
             mode: 'payment',
-            success_url: `https://pocusworld.netlify.app/payment-success?session_id={CHECKOUT_SESSION_ID}&courseId=${course._id}`,
-            cancel_url: `https://pocusworld.netlify.app/courses/${course._id}`,
+            success_url: `${process.env.CLIENT_URL}/payment-success?session_id={CHECKOUT_SESSION_ID}&courseId=${course._id}`,
+            cancel_url: `${process.env.CLIENT_URL}/courses/${course._id}`,
+            customer_email: user.email,
             metadata: {
-                userId: req.user.id,
+                userId: user._id.toString(),
                 courseId: course._id.toString(),
             }
         });
-        
-        res.json({ id: session.id, url: session.url });
 
+        res.json({ redirectUrl: session.url });
     } catch (error) {
-        console.error('Stripe Checkout Session Error:', error);
-        res.status(500).json({ message: 'Server Error: Could not create checkout session.', error: error.message });
+        console.error('Stripe session error:', error);
+        res.status(500).json({ message: 'Server Error: Could not create checkout session.' });
     }
 };
 
-// @desc    Enroll a user in a course
-// @route   POST /api/courses/:id/enroll
+// @desc    Enroll user in a course after successful payment
+// @route   POST /api/courses/:id/enroll-after-payment
 // @access  Private
-// NOTE: This endpoint is now for free courses only. We will need a webhook for paid courses.
-exports.enrollInCourse = async (req, res) => {
+exports.enrollAfterPayment = async (req, res) => {
     try {
-        const course = await Course.findById(req.params.id);
-        if (!course) {
-            return res.status(404).json({ message: 'Course not found' });
+        const { sessionId } = req.body;
+        const courseId = req.params.id;
+        const userId = req.user.id;
+
+        if (!sessionId) {
+            return res.status(400).json({ message: 'Session ID is required.' });
         }
 
-        const user = await User.findById(req.user.id);
-        if (user.enrolledCourses.some(e => e.course.toString() === course._id.toString())) {
-            return res.status(400).json({ message: 'User is already enrolled in this course.' });
-        }
-        
-        if (course.price > 0) {
-            return res.status(400).json({ message: 'This course is not free. Please use the payment gateway.' });
-        }
-        
-        const enrollmentData = {
-            course: course._id,
-            progress: [],
-            isCompleted: false,
-            lastViewedLesson: course.lessons && course.lessons.length > 0 ? course.lessons[0]._id : null,
-            lastViewedSlideIndex: 0
-        };
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-        user.enrolledCourses.push(enrollmentData);
-        await user.save({ validateBeforeSave: false });
-        res.json({ message: 'Enrolled successfully' });
-
-    } catch (error) {
-        console.error('Enrollment error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
-    }
-};
-
-
-// @desc Update user progress in a course
-// @route PUT /api/courses/:courseId/progress
-// @access Private
-exports.updateUserProgress = async (req, res) => {
-    const { lessonId, slideIndex } = req.body;
-    try {
-        const user = await User.findById(req.user.id);
-        const courseEnrollment = user.enrolledCourses.find(c => c.course.toString() === req.params.courseId);
-        if (courseEnrollment) {
-            courseEnrollment.lastViewedLesson = lessonId;
-            courseEnrollment.lastViewedSlideIndex = slideIndex;
-            // FIX: Add validateBeforeSave: false to prevent validation errors on existing user data
-            await user.save({ validateBeforeSave: false });
-            res.json({ message: 'Progress updated' });
-        } else {
-            res.status(404).json({ message: 'Enrollment not found' });
-        }
-    } catch (error) {
-        console.error('Progress update error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
-    }
-};
-
-// @desc    Submit a quiz for a slide
-// @route   POST /api/courses/:courseId/lesson/:lessonId/slide/:slideId/quiz
-// @access  Private
-exports.submitQuiz = async (req, res) => {
-    const { answers } = req.body;
-    const { courseId, lessonId, slideId } = req.params;
-    try {
-        const course = await Course.findById(courseId);
-        const lesson = course.lessons.id(lessonId);
-        const slide = lesson.slides.id(slideId);
-
-        if (!slide || !slide.quiz) {
-            return res.status(404).json({ message: 'Quiz not found' });
-        }
-
-        const quiz = slide.quiz;
-        let isCorrect = false;
-
-        if (quiz.type === 'single-choice') {
-            const correctAnswer = quiz.answers.find(ans => ans.isCorrect);
-            if (correctAnswer && correctAnswer._id.toString() === answers) {
-                isCorrect = true;
+        if (session.payment_status === 'paid') {
+            const user = await User.findById(userId);
+            
+            if (user.enrolledCourses.includes(courseId)) {
+                return res.status(200).json({ message: 'User already enrolled.' });
             }
-        } else if (quiz.type === 'multiple-choice') {
-            const correctAnswers = quiz.answers.filter(ans => ans.isCorrect).map(ans => ans._id.toString());
-            isCorrect = correctAnswers.length === answers.length && correctAnswers.every(id => answers.includes(id));
-        } else if (quiz.type === 'matching') {
-            isCorrect = quiz.matchPrompts.every(prompt => answers[prompt._id.toString()] === prompt.correctMatch);
-        }
 
-        const user = await User.findById(req.user.id);
-        const enrollment = user.enrolledCourses.find(e => e.course.toString() === courseId);
-        if (enrollment) {
-            const quizProgress = {
-                lessonId: lesson._id,
-                slideId: slide._id,
-                isCorrect: isCorrect,
-            };
-            const existingProgressIndex = enrollment.progress.findIndex(p => p.lessonId.toString() === lessonId && p.slideId.toString() === slideId);
-            if (existingProgressIndex !== -1) {
-                enrollment.progress[existingProgressIndex].isCorrect = isCorrect;
-            } else {
-                enrollment.progress.push(quizProgress);
-            }
-            // FIX: Add this line to bypass validation on save.
-            await user.save({ validateBeforeSave: false });
-        }
+            user.enrolledCourses.push(courseId);
+            await user.save();
 
-        if (isCorrect) {
-            res.json({ correct: true, message: 'Correct!' });
+            // Also add user to the course's enrolledUsers list
+            await Course.updateOne({ _id: courseId }, { $addToSet: { enrolledUsers: userId } });
+            
+            res.status(200).json({ message: 'Enrollment successful' });
         } else {
-            res.json({ correct: false, message: 'Incorrect, please try again.' });
+            res.status(400).json({ message: 'Payment not successful' });
         }
     } catch (error) {
-        console.error("Quiz submission error:", error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
-    }
-};
-
-// @desc    Submit a final exam for a course
-// @route   POST /api/courses/:courseId/final-exam
-// @access  Private
-exports.submitFinalExam = async (req, res) => {
-    const { answers } = req.body;
-    const { courseId } = req.params;
-
-    try {
-        const course = await Course.findById(courseId);
-        if (!course) return res.status(404).json({ message: 'Course not found' });
-
-        const finalExamLesson = course.lessons.find(l => l.isFinalExam);
-        const finalExamSlide = finalExamLesson?.slides[0];
-
-        if (!finalExamSlide?.quiz) return res.status(404).json({ message: 'Final exam not found' });
-
-        const quiz = finalExamSlide.quiz;
-        let isCorrect = false;
-
-        if (quiz.type === 'single-choice') {
-            const correctAnswer = quiz.answers.find(ans => ans.isCorrect);
-            if (correctAnswer && correctAnswer._id.toString() === answers) {
-                isCorrect = true;
-            }
-        } else if (quiz.type === 'multiple-choice') {
-            const correctAnswers = quiz.answers.filter(ans => ans.isCorrect).map(ans => ans._id.toString());
-            isCorrect = correctAnswers.length === answers.length && correctAnswers.every(id => answers.includes(id));
-        } else if (quiz.type === 'matching') {
-            isCorrect = quiz.matchPrompts.every(prompt => answers[prompt._id.toString()] === prompt.correctMatch);
-        }
-
-        const user = await User.findById(req.user.id);
-        const enrollment = user.enrolledCourses.find(e => e.course.toString() === courseId);
-        
-        if (enrollment && isCorrect) {
-            enrollment.isCompleted = true;
-            enrollment.progress.push({
-                lessonId: finalExamLesson._id,
-                slideId: finalExamSlide._id,
-                isCorrect: true,
-            });
-            // FIX: Add this line to bypass validation on save.
-            await user.save({ validateBeforeSave: false });
-            return res.json({ correct: true, message: 'Final Exam Passed! Your certificate is now available.' });
-        } else {
-            return res.json({ correct: false, message: 'Incorrect, please try again.' });
-        }
-    } catch (error) {
-        console.error("Final exam submission error:", error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
-    }
-};
-
-// @desc Save the certificate URL to the user's enrollment
-// @route PUT /api/courses/:courseId/save-certificate
-// @access Private
-exports.saveCertificate = async (req, res) => {
-    const { courseId } = req.params;
-    const { certificateData } = req.body;
-    
-    try {
-        const user = await User.findById(req.user.id);
-        if (!user) return res.status(404).json({ message: 'User not found' });
-
-        const enrollment = user.enrolledCourses.find(e => e.course.toString() === courseId);
-        if (!enrollment) return res.status(404).json({ message: 'User not enrolled in this course' });
-        
-        enrollment.certificate = certificateData;
-        // FIX: Add this line to bypass validation on save.
-        await user.save({ validateBeforeSave: false });
-        
-        res.json({ message: 'Certificate saved successfully.' });
-    } catch (error) {
-        console.error('Error saving certificate:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        console.error('Enrollment Error:', error);
+        res.status(500).json({ message: 'Server Error during enrollment process.' });
     }
 };
