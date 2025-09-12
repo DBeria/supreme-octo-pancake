@@ -30,7 +30,7 @@ const PaymentSuccess = () => {
                 const config = { headers: { 'Authorization': `Bearer ${token}` } };
                 // Call a new backend endpoint to enroll the user.
                 // We are not using webhooks for this example, but a webhook would be a more robust solution.
-                const res = await axios.post(`/api/courses/${courseId}/enroll`, {}, config);
+                const res = await axios.post(`/api/courses/${courseId}/enroll-after-payment`, { sessionId }, config);
                 console.log(res.data.message);
                 
                 // Dispatch event to update the header

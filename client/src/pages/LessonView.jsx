@@ -271,7 +271,7 @@ const LessonView = () => {
                                         <>
                                             <div className="w-full">
                                                 <div 
-                                                    className="relative w-full aspect-video bg-slate-200 dark:bg-slate-900 rounded-lg overflow-hidden" 
+                                                    className="relative w-full aspect-video bg-slate-200 dark:bg-slate-900 rounded-lg overflow-hidden shadow-inner"
                                                     style={{ backgroundColor: activeSlide?.backgroundColor || undefined }} 
                                                 >
                                                     {activeSlide?.elements.map((element, index) => {
