@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useSelector } from 'react-redux';
-import { Button } from '@/components/ui/button';
+// THIS IS THE CORRECTED LINE:
+import { Button } from '@/components/ui/button.jsx'; 
 import { toast } from 'react-hot-toast';
 import { FaPlayCircle, FaLock, FaBookOpen } from 'react-icons/fa';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -74,7 +75,6 @@ const CourseDetail = () => {
                             <img src={course.thumbnail} alt={course.title} className="w-full h-auto object-cover rounded-xl shadow-2xl mb-4" />
                             <h1 className="text-4xl md:text-5xl font-extrabold mb-2 text-cyan-400 tracking-tight">{course.title}</h1>
                             
-                            {/* THIS IS THE ONLY CHANGE IN THIS ENTIRE FILE */}
                             {course.author && course.author.fullName && (
                                 <p className="mb-6 text-lg text-slate-400">
                                     Created by <span className="font-semibold text-slate-300">{course.author.fullName}</span>
