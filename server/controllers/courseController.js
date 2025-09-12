@@ -211,8 +211,8 @@ exports.createCheckoutSession = async (req, res) => {
                 },
             ],
             mode: 'payment',
-            success_url: `${req.protocol}://${req.get('host')}/payment-success?session_id={CHECKOUT_SESSION_ID}&courseId=${course._id}`,
-            cancel_url: `${req.protocol}://${req.get('host')}/courses/${course._id}`,
+            success_url: `https://pocusworld.netlify.app/payment-success?session_id={CHECKOUT_SESSION_ID}&courseId=${course._id}`,
+            cancel_url: `https://pocusworld.netlify.app/courses/${course._id}`,
             metadata: {
                 userId: req.user.id,
                 courseId: course._id.toString(),
