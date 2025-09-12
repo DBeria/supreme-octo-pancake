@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useSelector } from 'react-redux';
-// THIS IS THE CORRECTED LINE:
 import { Button } from '@/components/ui/button.jsx'; 
 import { toast } from 'react-hot-toast';
 import { FaPlayCircle, FaLock, FaBookOpen } from 'react-icons/fa';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+// THIS IS THE CORRECTED LINE:
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const CourseDetail = () => {
@@ -69,7 +69,6 @@ const CourseDetail = () => {
             <div className="max-w-7xl mx-auto">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
-                    {/* Left Column */}
                     <div className="lg:col-span-2">
                         <div className="mb-6">
                             <img src={course.thumbnail} alt={course.title} className="w-full h-auto object-cover rounded-xl shadow-2xl mb-4" />
@@ -85,7 +84,6 @@ const CourseDetail = () => {
                         </div>
                     </div>
 
-                    {/* Right Column */}
                     <div className="lg:col-span-1">
                         <Card className="bg-slate-900 border-slate-700">
                             <CardHeader>
