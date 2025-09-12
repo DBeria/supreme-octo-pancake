@@ -5,13 +5,17 @@ exports.getOrCreateMyProfile = async (req, res) => {
     try {
         let author = await Author.findOne({ user: req.user.id });
         if (!author) {
-            author = await Author.create({
+            // FIX: Create a new author profile if one doesn't exist for the logged-in admin
+            author = new Author({
                 user: req.user.id,
-                fullName: req.user.name
+                fullName: req.user.name,
+                // You can add other default fields here if necessary
             });
+            await author.save();
         }
         res.json(author);
     } catch (error) {
+        console.error("Error in getOrCreateMyProfile:", error);
         res.status(500).json({ message: 'Server Error', error: error.message });
     }
 };
