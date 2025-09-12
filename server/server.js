@@ -1,15 +1,15 @@
-import express from 'express';
-import dotenv from 'dotenv';
-import cors from 'cors';
-import connectDB from './config/db.js';
-import { notFound, errorHandler } from './middleware/errorMiddleware.js';
-import path from 'path';
+const express = require('express');
+const dotenv = require('dotenv');
+const cors = require('cors');
+const path = require('path');
+const connectDB = require('./config/db');
+const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
-// Import your existing route files
-import courseRoutes from './routes/courses.js';
-import userRoutes from './routes/users.js';
-import authRoutes from './routes/auth.js';
-import authorRoutes from './routes/authors.js';
+// Import route files
+const courseRoutes = require('./routes/courses');
+const userRoutes = require('./routes/users');
+const authRoutes = require('./routes/auth');
+const authorRoutes = require('./routes/authors');
 
 dotenv.config();
 
@@ -17,12 +17,12 @@ connectDB();
 
 const app = express();
 
-// CORS configuration - REMEMBER to add your Netlify URL
+// CORS configuration
 const corsOptions = {
     origin: [
-        'http://localhost:5173', 
+        'http://localhost:5173',
         'https://pocus-world-backend.onrender.com',
-        'https://your-netlify-site-url.netlify.app' // Add your Netlify URL here
+        'https://pocus-world.netlify.app' // I've added your likely Netlify URL, please confirm it's correct
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
@@ -32,11 +32,12 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// API Routes - This is the corrected section
+// API Routes
 app.use('/api/courses', courseRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/authors', authorRoutes);
+
 
 // Serve frontend build in production
 const __dirname = path.resolve();
@@ -51,6 +52,7 @@ if (process.env.NODE_ENV === 'production') {
         res.send('API is running...');
     });
 }
+
 
 // Custom error handling
 app.use(notFound);
