@@ -1,54 +1,55 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const dotenv = require('dotenv');
+import express from 'express';
+import dotenv from 'dotenv';
+import cors from 'cors';
+import connectDB from './config/db.js';
+import courseRoutes from './routes/courseRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import { notFound, errorHandler } from './middleware/errorMiddleware.js';
+import path from 'path';
 
 dotenv.config();
 
-const authRoutes = require('./routes/auth');
-const courseRoutes = require('./routes/courses');
-const authorRoutes = require('./routes/authors');
-const userRoutes = require('./routes/users');
+connectDB();
 
 const app = express();
 
-// --- THIS IS THE FIX ---
-// Define a list of allowed domains
-const allowedOrigins = [
-  'https://pocusworld.netlify.app', // Your live frontend URL
-  'http://localhost:5173',          // Your local development URL
-];
-
+// CORS configuration
 const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  }
+    origin: [
+        'http://localhost:5173', 
+        'https://pocus-world-backend.onrender.com',
+        'https://pocusworld.netlify.app/' 
+    ],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+    optionsSuccessStatus: 204
 };
 
-// Use the configured CORS options
 app.use(cors(corsOptions));
-// --- END OF FIX ---
-
-// Middleware
 app.use(express.json());
 
-// Routes
-app.use('/api/auth', authRoutes);
+// API Routes
 app.use('/api/courses', courseRoutes);
-app.use('/api/authors', authorRoutes);
 app.use('/api/users', userRoutes);
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('MongoDB Connected'))
-  .catch(err => console.log(err));
+// Serve frontend build in production
+const __dirname = path.resolve();
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, '/client/dist')));
+    
+    app.get('*', (req, res) => 
+        res.sendFile(path.resolve(__dirname, 'client', 'dist', 'index.html'))
+    );
+} else {
+    app.get('/', (req, res) => {
+        res.send('API is running...');
+    });
+}
+
+// Custom error handling
+app.use(notFound);
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`));
