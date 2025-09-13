@@ -22,7 +22,7 @@ const corsOptions = {
     origin: [
         'http://localhost:5173',
         'https://pocus-world-backend.onrender.com',
-        'https://pocus-world.netlify.app' // I've added your likely Netlify URL, please confirm it's correct
+        'https://pocus-world.netlify.app' 
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
@@ -40,7 +40,7 @@ app.use('/api/authors', authorRoutes);
 
 
 // Serve frontend build in production
-const __dirname = path.resolve();
+// The line 'const __dirname = path.resolve();' has been removed from here.
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.join(__dirname, '/client/dist')));
     
