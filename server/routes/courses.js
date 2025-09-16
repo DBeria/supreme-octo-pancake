@@ -2,9 +2,20 @@ const express = require('express');
 const router = express.Router();
 
 const {
-    createCourse, getAllCourses, getAdminCourses, getCourseById, updateCourse,
-    deleteCourse, permanentlyDeleteCourse, restoreCourse, enrollInCourse,
-    updateUserProgress, submitQuiz, submitFinalExam, saveCertificate, createCheckoutSession
+    createCourse,
+    getAllCourses,
+    getAdminCourses, // Kept this version
+    getCourseById,
+    updateCourse,
+    deleteCourse,
+    permanentlyDeleteCourse,
+    restoreCourse,
+    enrollInCourse,
+    updateUserProgress,
+    submitQuiz,
+    submitFinalExam,
+    saveCertificate,
+    createCheckoutSession
 } = require('../controllers/courseController');
 
 // Import middleware
@@ -30,9 +41,13 @@ router.route('/:id/permanent-delete').delete(protect, admin, isCourseOwner, perm
 // Routes for user actions
 router.route('/:id/enroll').post(protect, enrollInCourse);
 router.route('/:id/create-checkout-session').post(protect, createCheckoutSession);
+
+// User progress and quiz submission
 router.route('/:courseId/progress').put(protect, updateUserProgress);
 router.route('/:courseId/lesson/:lessonId/slide/:slideId/quiz').post(protect, submitQuiz);
 router.route('/:courseId/lesson/:lessonId/final-exam').post(protect, submitFinalExam);
+
+// Certificate saving
 router.route('/:courseId/save-certificate').put(protect, saveCertificate);
 
 module.exports = router;

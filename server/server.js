@@ -1,54 +1,60 @@
-// server/server.js
+const path = require('path');
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const mongoose = require('mongoose');
+const connectDB = require('./config/db');
+const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+
+// Route files
+const courseRoutes = require('./routes/courses');
+const authRoutes = require('./routes/auth');
+const authorRoutes = require('./routes/authors');
+const userRoutes = require('./routes/users'); // Assuming you have this file
 
 dotenv.config();
-
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+connectDB();
 
 const app = express();
 
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Middleware to parse JSON bodies
+app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('MongoDB connected successfully'))
-    .catch(err => console.error('MongoDB connection error:', err));
-
-// API Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/courses', require('./routes/courses'));
-app.use('/api/authors', require('./routes/authors'));
-
-// --- ERROR HANDLING LOGIC ---
-// This function handles requests to routes that don't exist (404 Not Found).
-const notFound = (req, res, next) => {
-    const error = new Error(`Not Found - ${req.originalUrl}`);
-    res.status(404);
-    next(error);
+// CORS configuration to allow requests from your frontend
+const corsOptions = {
+    origin: [
+        'http://localhost:5173',
+        'https://pocus-world-backend.onrender.com',
+        'https://pocus-world.netlify.app'
+    ],
+    credentials: true,
 };
+app.use(cors(corsOptions));
 
-// This function is the general error handler. It catches any errors that occur.
-const errorHandler = (err, req, res, next) => {
-    // Set the status code to 500 (Internal Server Error) if it's a normal 200 OK.
-    const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-    res.status(statusCode);
-    // Send a JSON response with the error details.
-    res.json({
-        message: err.message,
-        // Only show the detailed stack trace in development mode for security.
-        stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+// Mount routers for all API endpoints
+app.use('/api/courses', courseRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/authors', authorRoutes);
+app.use('/api/users', userRoutes);
+
+// --- Production Build Logic ---
+// This part serves your React app when you are not in development
+if (process.env.NODE_ENV === 'production') {
+    const __dirname = path.resolve();
+    app.use(express.static(path.join(__dirname, '/client/dist')));
+    
+    app.get('*', (req, res) => 
+        res.sendFile(path.resolve(__dirname, 'client', 'dist', 'index.html'))
+    );
+} else {
+    app.get('/', (req, res) => {
+        res.send('API is running....');
     });
-};
+}
 
-// --- Tell the app to USE the error handlers ---
-// It's important that these are placed AFTER your API routes.
+// --- Error Handling Middleware ---
+// These must be the last pieces of middleware loaded
 app.use(notFound);
 app.use(errorHandler);
-// ------------------------------------------
 
-const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`));
