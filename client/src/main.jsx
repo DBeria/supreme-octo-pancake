@@ -8,11 +8,11 @@ import {
   RouterProvider,
 } from 'react-router-dom';
 import { Provider } from 'react-redux';
-import store from './store'; // This will import the store we create next
+import store from './store';
 import './index.css';
 
-// Import your page components
-import HomePage from './pages/home.jsx';
+// Import all your page components with the correct paths
+import Home from './pages/Home.jsx'; // This is the fix
 import CourseDetail from './pages/CourseDetail.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 // ... import other pages as needed
@@ -20,7 +20,7 @@ import AdminDashboard from './pages/AdminDashboard.jsx';
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route path="/" element={<App />}>
-      <Route index={true} path="/" element={<HomePage />} />
+      <Route index={true} path="/" element={<Home />} />
       <Route path="/courses/:id" element={<CourseDetail />} />
       
       {/* Add your other routes here */}
@@ -33,7 +33,6 @@ const router = createBrowserRouter(
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    {/* This Provider is the fix. It makes the Redux store available to all pages. */}
     <Provider store={store}>
       <RouterProvider router={router} />
     </Provider>
