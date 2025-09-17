@@ -1,12 +1,17 @@
-# Ignore server-side security and config files
+# Dependencies
+/node_modules
+/client/node_modules
+/server/node_modules
+
+# Environment variables
+.env
 /server/.env
-/server/certificate.pem
-/server/private.key
-/server/package-lock.json
+/client/.env
 
-# Ignore client-side dependencies and config
-/client/node_modules/
-/client/package-lock.json
+# Lock files (often not ignored, but can be)
+# package-lock.json
+# /server/package-lock.json
+# /client/package-lock.json
 
-# Ignore local build outputs
-/client/dist/
+# Build output
+/client/dist

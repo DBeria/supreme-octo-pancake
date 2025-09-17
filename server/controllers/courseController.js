@@ -1,5 +1,6 @@
 const Course = require('../models/Course');
 const User = require('../models/User');
+const Author = require('../models/Author'); // Added this line for the migration
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // @desc    Create a new course
@@ -192,6 +193,44 @@ const submitQuiz = async (req, res) => res.status(501).json({ message: "Not impl
 const submitFinalExam = async (req, res) => res.status(501).json({ message: "Not implemented" });
 const saveCertificate = async (req, res) => res.status(501).json({ message: "Not implemented" });
 
+// --- MIGRATION FUNCTION ---
+// @desc    Run a one-time script to migrate old courses
+// @route   GET /api/courses/run-migration
+// @access  Private/Admin
+const runMigration = async (req, res) => {
+    try {
+        const oldCourses = await Course.find({ createdBy: { $exists: false } });
+
+        if (oldCourses.length === 0) {
+            return res.status(200).send('<h1>Migration Not Needed</h1><p>No old courses were found to migrate. Everything is already up to date!</p>');
+        }
+
+        let updatedCount = 0;
+        let logs = `<h1>Starting Migration...</h1><p>Found ${oldCourses.length} old courses.</p><ul>`;
+
+        for (const course of oldCourses) {
+            if (course.creator) {
+                const author = await Author.findById(course.creator);
+                if (author && author.user) {
+                    course.createdBy = author.user;
+                    await course.save();
+                    logs += `<li>Successfully migrated course: "${course.title}"</li>`;
+                    updatedCount++;
+                } else {
+                    logs += `<li style="color: red;">Could not find author/user for course: "${course.title}"</li>`;
+                }
+            }
+        }
+
+        logs += `</ul><h2>Migration Complete!</h2><p>Successfully updated ${updatedCount} of ${oldCourses.length} courses.</p>`;
+        res.status(200).send(logs);
+
+    } catch (error) {
+        console.error('An error occurred during migration:', error);
+        res.status(500).send(`<h1>Error During Migration</h1><p>${error.message}</p>`);
+    }
+};
+
 
 module.exports = {
     createCourse,
@@ -207,5 +246,6 @@ module.exports = {
     updateUserProgress,
     submitQuiz,
     submitFinalExam,
-    saveCertificate
+    saveCertificate,
+    runMigration // Added this line
 };

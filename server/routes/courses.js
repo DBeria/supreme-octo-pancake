@@ -4,7 +4,7 @@ const router = express.Router();
 const {
     createCourse,
     getAllCourses,
-    getAdminCourses, // Kept this version
+    getAdminCourses,
     getCourseById,
     updateCourse,
     deleteCourse,
@@ -15,7 +15,8 @@ const {
     submitQuiz,
     submitFinalExam,
     saveCertificate,
-    createCheckoutSession
+    createCheckoutSession,
+    runMigration // Make sure this is imported
 } = require('../controllers/courseController');
 
 // Import middleware
@@ -25,6 +26,9 @@ const { isCourseOwner } = require('../middleware/courseMiddleware');
 
 // Route to get ONLY the courses for the logged-in admin dashboard
 router.route('/admin-courses').get(protect, admin, getAdminCourses);
+
+// --- ADD THE NEW MIGRATION ROUTE HERE ---
+router.route('/run-migration').get(protect, admin, runMigration);
 
 // Routes for all courses and creating a new course
 router.route('/').get(getAllCourses).post(protect, admin, createCourse);
