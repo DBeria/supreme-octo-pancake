@@ -13,8 +13,8 @@ const createCourse = async (req, res) => {
         const course = new Course({
             title, description, level, specialty, price, imageUrl, isPublic, instructorWelcomeNote,
             tags: tags || [],
-            lessons: [], // Start with no lessons
-            createdBy: req.user.id, // This is the fix: It uses the User ID directly.
+            createdBy: req.user.id, // This is the fix. It uses the User ID directly.
+            lessons: [],
         });
         
         const createdCourse = await course.save();
@@ -26,8 +26,6 @@ const createCourse = async (req, res) => {
 };
 
 // @desc    Get courses for the logged-in admin's dashboard
-// @route   GET /api/courses/admin-courses
-// @access  Private/Admin
 const getAdminCourses = async (req, res) => {
     try {
         const courses = await Course.find({ createdBy: req.user.id }).sort({ createdAt: -1 });
@@ -38,12 +36,10 @@ const getAdminCourses = async (req, res) => {
 };
 
 // @desc    Get all active courses for public view
-// @route   GET /api/courses
-// @access  Public
 const getAllCourses = async (req, res) => {
     try {
         const courses = await Course.find({ isPublic: true, status: { $ne: 'deleted' } })
-            .populate('createdBy', 'name fullName profilePicture'); // Fetches creator's details
+            .populate('createdBy', 'name fullName profilePicture');
         res.json(courses);
     } catch (error) {
         res.status(500).json({ message: 'Server Error' });
@@ -51,12 +47,10 @@ const getAllCourses = async (req, res) => {
 };
 
 // @desc    Get course by ID
-// @route   GET /api/courses/:id
-// @access  Public
 const getCourseById = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id)
-             .populate('createdBy', 'name fullName profilePicture'); // Populates creator's info for the detail page
+             .populate('createdBy', 'name fullName profilePicture');
 
         if (course) {
             res.json(course);
@@ -68,10 +62,7 @@ const getCourseById = async (req, res) => {
     }
 };
 
-
 // @desc    Update a course
-// @route   PUT /api/courses/:id
-// @access  Private/Admin (protected by isCourseOwner middleware)
 const updateCourse = async (req, res) => {
     try {
         const updatedCourse = await Course.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -82,9 +73,7 @@ const updateCourse = async (req, res) => {
     }
 };
 
-// @desc    Soft delete a course (move to recycle bin)
-// @route   DELETE /api/courses/:id
-// @access  Private/Admin (protected by isCourseOwner middleware)
+// @desc    Soft delete a course
 const deleteCourse = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
@@ -102,8 +91,6 @@ const deleteCourse = async (req, res) => {
 };
 
 // @desc    Restore a soft-deleted course
-// @route   PUT /api/courses/:id/restore
-// @access  Private/Admin (protected by isCourseOwner middleware)
 const restoreCourse = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
@@ -121,8 +108,6 @@ const restoreCourse = async (req, res) => {
 };
 
 // @desc    Permanently delete a course
-// @route   DELETE /api/courses/:id/permanent-delete
-// @access  Private/Admin (protected by isCourseOwner middleware)
 const permanentlyDeleteCourse = async (req, res) => {
     try {
         const course = await Course.findByIdAndDelete(req.params.id);
@@ -134,8 +119,6 @@ const permanentlyDeleteCourse = async (req, res) => {
 };
 
 // @desc    Enroll user in a course
-// @route   POST /api/courses/:id/enroll
-// @access  Private
 const enrollInCourse = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
@@ -154,8 +137,6 @@ const enrollInCourse = async (req, res) => {
 };
 
 // @desc    Create a Stripe checkout session
-// @route   POST /api/courses/:id/create-checkout-session
-// @access  Private
 const createCheckoutSession = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
@@ -185,17 +166,7 @@ const createCheckoutSession = async (req, res) => {
     }
 };
 
-
-// --- Placeholder functions for progress, quizzes, and certificates ---
-const updateUserProgress = async (req, res) => res.status(501).json({ message: "Not implemented" });
-const submitQuiz = async (req, res) => res.status(501).json({ message: "Not implemented" });
-const submitFinalExam = async (req, res) => res.status(501).json({ message: "Not implemented" });
-const saveCertificate = async (req, res) => res.status(501).json({ message: "Not implemented" });
-
 // --- THIS IS THE COURSE CONVERTER ---
-// @desc    Run a one-time script to migrate old courses
-// @route   GET /api/courses/convert-old-courses
-// @access  Private/Admin
 const runMigration = async (req, res) => {
     try {
         const oldCourses = await Course.find({ createdBy: { $exists: false } });
@@ -242,9 +213,10 @@ module.exports = {
     permanentlyDeleteCourse,
     enrollInCourse,
     createCheckoutSession,
-    updateUserProgress,
-    submitQuiz,
-    submitFinalExam,
-    saveCertificate,
-    runMigration // Add this line
+    runMigration,
+    // Add these back if they are used elsewhere
+    updateUserProgress: async (req, res) => res.status(501).json({ message: "Not implemented" }),
+    submitQuiz: async (req, res) => res.status(501).json({ message: "Not implemented" }),
+    submitFinalExam: async (req, res) => res.status(501).json({ message: "Not implemented" }),
+    saveCertificate: async (req, res) => res.status(501).json({ message: "Not implemented" }),
 };

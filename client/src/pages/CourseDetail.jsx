@@ -1,14 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
+import { motion } from 'framer-motion';
+import { BarChart, BookOpen, CheckCircle, ArrowRight, ChevronDown } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { Button } from '@/components/ui/button.jsx';
 import { toast } from 'react-hot-toast';
-import { FaPlayCircle, FaLock, FaBookOpen, FaArrowRight } from 'react-icons/fa';
+import { FaPlayCircle, FaLock, FaArrowRight } from 'react-icons/fa';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx';
 import { Skeleton } from '@/components/ui/skeleton.jsx';
-import { motion } from 'framer-motion';
-import { BarChart, CheckCircle, ChevronDown } from 'lucide-react';
 
 
 const CourseDetail = () => {
@@ -16,13 +16,11 @@ const CourseDetail = () => {
     const [course, setCourse] = useState(null);
     const [loading, setLoading] = useState(true);
     const { userInfo } = useSelector(state => state.auth);
-    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchCourse = async () => {
-            const config = userInfo ? { headers: { Authorization: `Bearer ${userInfo.token}` } } : {};
             try {
-                const { data } = await axios.get(`/api/courses/${id}`, config);
+                const { data } = await axios.get(`/api/courses/${id}`);
                 setCourse(data);
             } catch (error) {
                 console.error('Failed to fetch course', error);
@@ -32,25 +30,17 @@ const CourseDetail = () => {
             }
         };
         fetchCourse();
-    }, [id, userInfo]);
+    }, [id]);
 
     const handleCheckout = async () => {
         if (!userInfo) {
             toast.error('Please log in to enroll in a course.');
-            navigate('/login');
             return;
         }
         try {
-            const config = {
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${userInfo.token}`,
-                },
-            };
+            const config = { headers: { Authorization: `Bearer ${userInfo.token}` } };
             const { data } = await axios.post(`/api/courses/${id}/create-checkout-session`, {}, config);
-            if (data.redirectUrl) {
-                window.location.href = data.redirectUrl;
-            } else if (data.url) { // Fallback for different key names
+            if (data.url) {
                 window.location.href = data.url;
             }
         } catch (error) {
@@ -61,8 +51,6 @@ const CourseDetail = () => {
 
     const isEnrolled = userInfo && userInfo.enrolledCourses?.some(enrolledCourse => enrolledCourse.course === id || enrolledCourse.course?._id === id);
     const isAdmin = userInfo && userInfo.role === 'admin';
-    
-    // This is the fix: It looks for the new `createdBy` field.
     const author = course?.createdBy;
 
     if (loading) {
@@ -71,15 +59,6 @@ const CourseDetail = () => {
                 <div className="max-w-7xl mx-auto">
                     <Skeleton className="w-3/4 h-12 mb-4" />
                     <Skeleton className="w-full h-96 mb-8" />
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <div className="lg:col-span-2 space-y-4">
-                            <Skeleton className="w-full h-8" />
-                            <Skeleton className="w-full h-24" />
-                        </div>
-                        <div className="lg:col-span-1">
-                            <Skeleton className="w-full h-64" />
-                        </div>
-                    </div>
                 </div>
             </div>
         );
@@ -93,14 +72,11 @@ const CourseDetail = () => {
         <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-6 md:p-8">
             <div className="max-w-7xl mx-auto">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    
-                    {/* Left Column */}
                     <div className="lg:col-span-2">
                         <div className="mb-6">
                             <img src={course.imageUrl} alt={course.title} className="w-full h-auto object-cover rounded-xl shadow-2xl mb-4" />
                             <h1 className="text-4xl md:text-5xl font-extrabold mb-2 text-cyan-400 tracking-tight">{course.title}</h1>
                             
-                            {/* This now correctly displays the author's name or a fallback */}
                             <p className="mb-6 text-lg text-slate-400">
                                 Created by <span className="font-semibold text-slate-300">{author?.fullName || author?.name || 'Unknown Author'}</span>
                             </p>
@@ -108,8 +84,6 @@ const CourseDetail = () => {
                             <p className="text-slate-300 text-lg leading-relaxed">{course.description}</p>
                         </div>
                     </div>
-
-                    {/* Right Column */}
                     <div className="lg:col-span-1">
                         <Card className="bg-slate-900 border-slate-700 sticky top-28">
                             <CardHeader>
@@ -121,7 +95,7 @@ const CourseDetail = () => {
                             <CardContent>
                                 <ul className="space-y-3 mb-6">
                                     {course.lessons && course.lessons.map((lesson, index) => (
-                                        <li key={lesson._id || index} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg transition-all hover:bg-slate-800">
+                                        <li key={lesson._id || index} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
                                             <div className="flex items-center">
                                                 {isEnrolled || isAdmin ? (
                                                     <FaPlayCircle className="text-cyan-400 mr-4 flex-shrink-0" />
@@ -151,7 +125,7 @@ const CourseDetail = () => {
                                 </div>
                                 {author && (
                                     <Link to={`/author/${author._id}`} className="block mt-6 group">
-                                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex items-center gap-4 transition-all duration-300 group-hover:shadow-xl group-hover:border-cyan-500">
+                                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex items-center gap-4">
                                             <img src={author.profilePicture} alt={author.fullName || author.name} className="w-14 h-14 rounded-full object-cover"/>
                                             <div>
                                                 <p className="font-bold text-white">{author.fullName || author.name}</p>

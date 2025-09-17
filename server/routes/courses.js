@@ -16,7 +16,7 @@ const {
     submitFinalExam,
     saveCertificate,
     createCheckoutSession,
-    runMigration // Make sure this is imported
+    runMigration // Make sure runMigration is imported
 } = require('../controllers/courseController');
 
 // Import middleware
@@ -24,34 +24,27 @@ const { protect } = require('../middleware/authMiddleware');
 const { admin } = require('../middleware/adminMiddleware');
 const { isCourseOwner } = require('../middleware/courseMiddleware');
 
-// Route to get ONLY the courses for the logged-in admin dashboard
+// Route for the admin dashboard
 router.route('/admin-courses').get(protect, admin, getAdminCourses);
 
-// --- ADD THE NEW MIGRATION ROUTE HERE ---
-router.route('/run-migration').get(protect, admin, runMigration);
+// --- THE SECRET LINK FOR THE CONVERTER ---
+router.route('/convert-old-courses').get(protect, admin, runMigration);
 
-// Routes for all courses and creating a new course
+// General public routes
 router.route('/').get(getAllCourses).post(protect, admin, createCourse);
 
-// Routes for a single course, with ownership protection on sensitive actions
-router.route('/:id')
-    .get(getCourseById)
-    .put(protect, admin, isCourseOwner, updateCourse)       // Only owner can update
-    .delete(protect, admin, isCourseOwner, deleteCourse);   // Only owner can delete
-
+// Routes for a single course
+router.route('/:id').get(getCourseById).put(protect, admin, isCourseOwner, updateCourse).delete(protect, admin, isCourseOwner, deleteCourse);
 router.route('/:id/restore').put(protect, admin, isCourseOwner, restoreCourse);
 router.route('/:id/permanent-delete').delete(protect, admin, isCourseOwner, permanentlyDeleteCourse);
-
-// Routes for user actions
 router.route('/:id/enroll').post(protect, enrollInCourse);
 router.route('/:id/create-checkout-session').post(protect, createCheckoutSession);
 
-// User progress and quiz submission
+// Routes for user progress
 router.route('/:courseId/progress').put(protect, updateUserProgress);
 router.route('/:courseId/lesson/:lessonId/slide/:slideId/quiz').post(protect, submitQuiz);
 router.route('/:courseId/lesson/:lessonId/final-exam').post(protect, submitFinalExam);
-
-// Certificate saving
 router.route('/:courseId/save-certificate').put(protect, saveCertificate);
+
 
 module.exports = router;
