@@ -1,6 +1,6 @@
 const Course = require('../models/Course');
 const User = require('../models/User');
-const Author = require('../models/Author'); // Added this line for the migration
+const Author = require('../models/Author'); // Needed for the course converter
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // @desc    Create a new course
@@ -14,7 +14,7 @@ const createCourse = async (req, res) => {
             title, description, level, specialty, price, imageUrl, isPublic, instructorWelcomeNote,
             tags: tags || [],
             lessons: [], // Start with no lessons
-            createdBy: req.user.id, // Directly assign the logged-in user's ID as the creator
+            createdBy: req.user.id, // This is the fix: It uses the User ID directly.
         });
         
         const createdCourse = await course.save();
@@ -30,7 +30,6 @@ const createCourse = async (req, res) => {
 // @access  Private/Admin
 const getAdminCourses = async (req, res) => {
     try {
-        // This query filters courses to ONLY find ones where 'createdBy' matches the admin's ID.
         const courses = await Course.find({ createdBy: req.user.id }).sort({ createdAt: -1 });
         res.json(courses);
     } catch (error) {
@@ -193,20 +192,20 @@ const submitQuiz = async (req, res) => res.status(501).json({ message: "Not impl
 const submitFinalExam = async (req, res) => res.status(501).json({ message: "Not implemented" });
 const saveCertificate = async (req, res) => res.status(501).json({ message: "Not implemented" });
 
-// --- MIGRATION FUNCTION ---
+// --- THIS IS THE COURSE CONVERTER ---
 // @desc    Run a one-time script to migrate old courses
-// @route   GET /api/courses/run-migration
+// @route   GET /api/courses/convert-old-courses
 // @access  Private/Admin
 const runMigration = async (req, res) => {
     try {
         const oldCourses = await Course.find({ createdBy: { $exists: false } });
 
         if (oldCourses.length === 0) {
-            return res.status(200).send('<h1>Migration Not Needed</h1><p>No old courses were found to migrate. Everything is already up to date!</p>');
+            return res.status(200).send('<h1>Converter Not Needed</h1><p>No old courses were found to convert. Everything is already up to date!</p>');
         }
 
         let updatedCount = 0;
-        let logs = `<h1>Starting Migration...</h1><p>Found ${oldCourses.length} old courses.</p><ul>`;
+        let logs = `<h1>Starting Course Conversion...</h1><p>Found ${oldCourses.length} old courses.</p><ul>`;
 
         for (const course of oldCourses) {
             if (course.creator) {
@@ -214,7 +213,7 @@ const runMigration = async (req, res) => {
                 if (author && author.user) {
                     course.createdBy = author.user;
                     await course.save();
-                    logs += `<li>Successfully migrated course: "${course.title}"</li>`;
+                    logs += `<li>Successfully converted course: "${course.title}"</li>`;
                     updatedCount++;
                 } else {
                     logs += `<li style="color: red;">Could not find author/user for course: "${course.title}"</li>`;
@@ -222,12 +221,12 @@ const runMigration = async (req, res) => {
             }
         }
 
-        logs += `</ul><h2>Migration Complete!</h2><p>Successfully updated ${updatedCount} of ${oldCourses.length} courses.</p>`;
+        logs += `</ul><h2>Conversion Complete!</h2><p>Successfully updated ${updatedCount} of ${oldCourses.length} courses.</p>`;
         res.status(200).send(logs);
 
     } catch (error) {
-        console.error('An error occurred during migration:', error);
-        res.status(500).send(`<h1>Error During Migration</h1><p>${error.message}</p>`);
+        console.error('An error occurred during conversion:', error);
+        res.status(500).send(`<h1>Error During Conversion</h1><p>${error.message}</p>`);
     }
 };
 
@@ -247,5 +246,5 @@ module.exports = {
     submitQuiz,
     submitFinalExam,
     saveCertificate,
-    runMigration // Added this line
+    runMigration // Add this line
 };

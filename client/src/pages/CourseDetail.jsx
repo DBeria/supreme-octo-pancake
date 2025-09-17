@@ -61,10 +61,11 @@ const CourseDetail = () => {
 
     const isEnrolled = userInfo && userInfo.enrolledCourses?.some(enrolledCourse => enrolledCourse.course === id || enrolledCourse.course?._id === id);
     const isAdmin = userInfo && userInfo.role === 'admin';
+    
+    // This is the fix: It looks for the new `createdBy` field.
     const author = course?.createdBy;
 
     if (loading) {
-        // A more detailed skeleton loader for better UX
         return (
             <div className="min-h-screen bg-slate-950 p-8">
                 <div className="max-w-7xl mx-auto">
@@ -99,11 +100,10 @@ const CourseDetail = () => {
                             <img src={course.imageUrl} alt={course.title} className="w-full h-auto object-cover rounded-xl shadow-2xl mb-4" />
                             <h1 className="text-4xl md:text-5xl font-extrabold mb-2 text-cyan-400 tracking-tight">{course.title}</h1>
                             
-                            {author && (author.fullName || author.name) && (
-                                <p className="mb-6 text-lg text-slate-400">
-                                    Created by <span className="font-semibold text-slate-300">{author.fullName || author.name}</span>
-                                </p>
-                            )}
+                            {/* This now correctly displays the author's name or a fallback */}
+                            <p className="mb-6 text-lg text-slate-400">
+                                Created by <span className="font-semibold text-slate-300">{author?.fullName || author?.name || 'Unknown Author'}</span>
+                            </p>
 
                             <p className="text-slate-300 text-lg leading-relaxed">{course.description}</p>
                         </div>
