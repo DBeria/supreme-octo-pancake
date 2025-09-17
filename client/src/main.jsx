@@ -12,9 +12,9 @@ import store from './store'; // This will import the store we create next
 import './index.css';
 
 // Import your page components
-import HomePage from './pages/HomePage';
-import CourseDetail from './pages/CourseDetail';
-import AdminDashboard from './pages/AdminDashboard';
+import HomePage from './pages/home.jsx';
+import CourseDetail from './pages/CourseDetail.jsx';
+import AdminDashboard from './pages/AdminDashboard.jsx';
 // ... import other pages as needed
 
 const router = createBrowserRouter(
