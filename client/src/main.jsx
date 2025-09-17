@@ -8,7 +8,7 @@ import {
   RouterProvider,
 } from 'react-router-dom';
 import { Provider } from 'react-redux';
-import store from './store'; // Make sure this path is correct
+import store from './store'; // This will import the store we create next
 import './index.css';
 
 // Import your page components
