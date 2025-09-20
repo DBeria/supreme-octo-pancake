@@ -10,7 +10,7 @@ import './index.css';
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    {/* This Provider makes the Redux store available to all your pages. */}
+    {/* This Provider is the fix. It makes the Redux store available to all your pages. */}
     <Provider store={store}>
       {/* This Router makes all the <Routes> in your App.jsx work. */}
       <Router>
