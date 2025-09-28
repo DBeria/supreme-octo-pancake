@@ -1,25 +1,25 @@
-// File: client/src/components/AdminRoute.jsx
-
+// client/src/components/AdminRoute.jsx
+import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-// THIS IS THE FIX: Using the correct 'named' import and aliasing it.
-import jwt_decode from "jwt-decode";
+import jwt_decode from 'jwt-decode';
 
 const AdminRoute = () => {
-    const { userInfo } = useSelector((state) => state.auth);
+  const { userInfo } = useSelector((state) => state.auth);
 
-    if (userInfo && userInfo.token) {
-        try {
-            const decodedToken = jwt_decode(userInfo.token);
-            if (decodedToken.isAdmin && decodedToken.exp * 1000 > Date.now()) {
-                return <Outlet />;
-            }
-        } catch (error) {
-            console.error("Invalid token in AdminRoute:", error);
-        }
+  if (userInfo && userInfo.token && userInfo.role === 'admin') {
+    try {
+      const decodedToken = jwt_decode(userInfo.token);
+      if (decodedToken.exp * 1000 > Date.now()) {
+        return <Outlet />; // Render child routes
+      }
+    } catch (error) {
+      console.error('Invalid token in AdminRoute:', error);
     }
+  }
 
-    return <Navigate to="/login" replace />;
+  // Redirect non-admins or invalid/expired tokens to login
+  return <Navigate to="/login" replace />;
 };
 
 export default AdminRoute;
