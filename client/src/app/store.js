@@ -1,8 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit';
-
-// Correct Path: The 'slices' directory is in the same 'src' directory as this file.
-import authReducer from './slices/authSlice';
-import { apiSlice } from './slices/apiSlice';
+// The import path is now stable and correct
+import authReducer from '../features/authSlice';
+import { apiSlice } from '../features/apiSlice';
 
 const store = configureStore({
   reducer: {
