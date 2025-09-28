@@ -51,7 +51,11 @@ const CourseDetail = () => {
 
     const isEnrolled = userInfo && userInfo.enrolledCourses?.some(enrolledCourse => enrolledCourse.course === id || enrolledCourse.course?._id === id);
     const isAdmin = userInfo && userInfo.role === 'admin';
-    const author = course?.createdBy;
+    
+    // --- THIS IS THE CHANGE ---
+    // We explicitly check if 'course' exists before trying to access 'createdBy'.
+    // This prevents any potential errors if the course data is still loading or fails to load.
+    const author = course ? course.createdBy : null;
 
     if (loading) {
         return (
@@ -78,7 +82,7 @@ const CourseDetail = () => {
                             <h1 className="text-4xl md:text-5xl font-extrabold mb-2 text-cyan-400 tracking-tight">{course.title}</h1>
                             
                             <p className="mb-6 text-lg text-slate-400">
-                                Created by <span className="font-semibold text-slate-300">{author?.fullName || author?.name || 'Unknown Author'}</span>
+                                Created by <span className="font-semibold text-slate-300">{author ? (author.fullName || author.name) : 'Unknown Author'}</span>
                             </p>
 
                             <p className="text-slate-300 text-lg leading-relaxed">{course.description}</p>
@@ -88,7 +92,7 @@ const CourseDetail = () => {
                         <Card className="bg-slate-900 border-slate-700 sticky top-28">
                             <CardHeader>
                                 <CardTitle className="flex items-center text-2xl">
-                                    <FaBookOpen className="mr-3 text-cyan-400" />
+                                    <BookOpen className="mr-3 text-cyan-400" />
                                     Course Content
                                 </CardTitle>
                             </CardHeader>

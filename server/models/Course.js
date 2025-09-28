@@ -2,7 +2,6 @@
 
 const mongoose = require('mongoose');
 
-// Sub-schema for individual elements on a slide
 const ContentElementSchema = new mongoose.Schema({
     type: { type: String, enum: ['text', 'image', 'video'], required: true },
     content: { type: String, required: true },
@@ -19,13 +18,11 @@ const ContentElementSchema = new mongoose.Schema({
     isVisible: { type: Boolean, default: true },
 }, { _id: true });
 
-// Sub-schema for matching quizzes
 const MatchPromptSchema = new mongoose.Schema({
     prompt: { type: String, default: 'Label' },
     correctMatch: { type: String, default: 'A' }
 }, { _id: true });
 
-// Sub-schema for quizzes
 const QuizSchema = new mongoose.Schema({
     type: { type: String, enum: ['single-choice', 'multiple-choice', 'matching'], default: 'single-choice' },
     question: { type: String, default: 'New Question' },
@@ -35,7 +32,6 @@ const QuizSchema = new mongoose.Schema({
     matchOptions: [{ type: String }]
 }, { _id: false });
 
-// Sub-schema for slides
 const SlideSchema = new mongoose.Schema({
     title: { type: String, default: 'New Slide' },
     elements: [ContentElementSchema],
@@ -43,14 +39,12 @@ const SlideSchema = new mongoose.Schema({
     backgroundColor: { type: String, default: '#FFFFFF' }
 }, { _id: true });
 
-// Sub-schema for lessons
 const LessonSchema = new mongoose.Schema({
     title: { type: String, required: true },
     slides: [SlideSchema],
     isFinalExam: { type: Boolean, default: false },
 }, { _id: true });
 
-// --- MAIN COURSE SCHEMA (Corrected) ---
 const CourseSchema = new mongoose.Schema({
     title: { type: String, required: true },
     description: { type: String, required: true },
@@ -63,11 +57,9 @@ const CourseSchema = new mongoose.Schema({
     lessons: [LessonSchema],
     tags: [{ type: String }],
     
-    // THIS IS THE FIX: I have removed 'required: true' from this line.
-    // This allows old courses without an author to load without crashing the server.
+    // THE FIX: 'required: true' has been removed.
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
-    // NEW: This field will store an array of students enrolled in the course.
     students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 
     status: { type: String, enum: ['active', 'deleted'], default: 'active' },
