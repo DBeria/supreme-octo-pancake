@@ -11,8 +11,9 @@ const Home = () => {
 
     useEffect(() => {
         const fetchCourses = async () => {
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
             try {
-                const { data } = await axios.get('/api/courses');
+                const { data } = await axios.get(`${API_URL}/api/courses`);
                 // Filter courses to show only public ones
                 setCourses(data.filter(course => course.isPublic));
             } catch (error) {
