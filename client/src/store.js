@@ -1,6 +1,10 @@
 import { configureStore } from '@reduxjs/toolkit';
-import authReducer from './app/authSlice'; 
-import { apiSlice } from './slices/apiSlice';
+
+// Corrected Path: Go up one level from 'app' to 'src', then into 'features/auth'
+import authReducer from '../features/auth/authSlice';
+
+// Corrected Path: Go up one level from 'app' to 'src', then into 'features/api'
+import { apiSlice } from '../features/api/apiSlice';
 
 const store = configureStore({
   reducer: {
