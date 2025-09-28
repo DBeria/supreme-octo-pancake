@@ -1,4 +1,4 @@
-// File: server/server.js
+// server/server.js - UPDATED AND FIXED
 
 const express = require('express');
 const dotenv = require('dotenv');
@@ -6,9 +6,10 @@ const connectDB = require('./config/db.js');
 const cors = require('cors');
 const path = require('path');
 
-// THIS IS THE FIX: Using simple, explicit relative paths with the .js extension.
-const courseRoutes = require('./routes/courseRoutes.js');
-const userRoutes = require('./routes/userRoutes.js');
+// FIX: Corrected the path to match the actual filename 'courses.js'.
+const courseRoutes = require('./routes/courses.js');
+// FIX: Corrected the path to match the actual filename 'users.js'.
+const userRoutes = require('./routes/users.js');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware.js');
 
 dotenv.config();
@@ -18,17 +19,21 @@ connectDB();
 const app = express();
 
 app.use(cors());
+
 app.use(express.json());
 
-// API Routes
 app.use('/api/courses', courseRoutes);
 app.use('/api/users', userRoutes);
+
+// ADD: Health check endpoint for Render/monitoring
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'UP', message: 'Backend is running.' });
+});
 
 app.get('/', (req, res) => {
     res.send('API is running...');
 });
 
-// Error handling
 app.use(notFound);
 app.use(errorHandler);
 
