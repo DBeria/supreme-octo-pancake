@@ -1,10 +1,15 @@
-// client/vite.config.js
+// File: client/vite.config.js
 
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from "path"
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from "path";
 
 export default defineConfig({
+  // THIS IS THE FIX:
+  // We are explicitly telling Vite that in production, all asset paths
+  // should start from the root of the domain ('/').
+  base: '/',
+
   plugins: [react()],
   resolve: {
     alias: {
@@ -18,12 +23,10 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
-    // UPDATED: Added Render.com to the list of allowed hosts
-    allowedHosts: ['.netlify.app', '.onrender.com', 'localhost'],
   },
   build: {
     rollupOptions: {
       external: ['react-rnd']
     }
   }
-})
+});
