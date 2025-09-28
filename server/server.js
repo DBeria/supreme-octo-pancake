@@ -7,7 +7,7 @@ const cors = require('cors');
 const connectDB = require('./config/db.js');
 
 // --- THIS IS THE FIX ---
-// We use robust, absolute paths to the route files using the built-in __dirname.
+// We use the built-in __dirname to create robust, absolute paths to the route files.
 const courseRoutes = require(path.join(__dirname, 'routes', 'courseRoutes.js'));
 const userRoutes = require(path.join(__dirname, 'routes', 'userRoutes.js'));
 const { notFound, errorHandler } = require(path.join(__dirname, 'middleware', 'errorMiddleware.js'));
