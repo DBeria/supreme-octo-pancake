@@ -1,7 +1,7 @@
 {
   "dependencies": {
-    "mongodb": "^2.2.12",
-    "react-quill": "^2.0.0",
+    "mongodb": "^6.20.0",
+    "react-quill": "^0.0.2",
     "react-rnd": "^10.5.2"
   }
 }
