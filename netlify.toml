@@ -1,14 +1,22 @@
-[build]
-  base = "client/"
-  command = "npm run build"
-  publish = "dist"
+# File: netlify.toml
 
+# This is the single source of truth for your build settings.
+[build]
+  # 1. First, navigate into the 'client' folder, THEN run the build command.
+  command = "cd client && npm run build"
+  
+  # 2. After the build, the final public website is in the 'client/dist' folder.
+  publish = "client/dist"
+
+# Rule 1: The API Proxy (More specific, so it comes first)
+# Forwards all API calls to your backend server on Render.
 [[redirects]]
   from = "/api/*"
   to = "https://pocus-world-backend.onrender.com/api/:splat"
   status = 200
-  force = true
 
+# Rule 2: The SPA Catch-All (Less specific, so it comes last)
+# This sends any other request to your index.html file so React Router can work.
 [[redirects]]
   from = "/*"
   to = "/index.html"
