@@ -1,5 +1,6 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
+import { useSelector } from 'react-redux'; // Import useSelector
 import Header from './components/Header';
 import Footer from './components/Footer';
 import PrivateRoute from './components/PrivateRoute';
@@ -20,37 +21,49 @@ import Blog from './pages/Blog';
 import BlogPost from './pages/BlogPost';
 import AuthorProfile from './pages/AuthorProfile';
 import PaymentSuccess from './pages/PaymentSuccess';
+import Spinner from './components/Spinner';
 
 function App() {
-    return (
-        <div className="flex flex-col min-h-screen">
-            <Header />
-            <main className="flex-grow">
-                <Routes>
-                    <Route path="/" element={<Home />} />
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/register" element={<Register />} />
-                    <Route path="/forgot-password" element={<ForgotPassword />} />
-                    <Route path="/reset-password/:resettoken" element={<ResetPassword />} />
-                    <Route path="/courses" element={<CourseCatalog />} />
-                    <Route path="/courses/:id" element={<CourseDetail />} />
-                    <Route path="/blog" element={<Blog />} />
-                    <Route path="/blog/:slug" element={<BlogPost />} />
-                    <Route path="/author/:id" element={<AuthorProfile />} />
-                    <Route path="/payment-success" element={<PaymentSuccess />} />
+  // Get the authentication state from the Redux store
+  const { loading } = useSelector((state) => state.auth);
 
-                    <Route path="/dashboard" element={<PrivateRoute><UserDashboard /></PrivateRoute>} />
-                    <Route path="/account" element={<PrivateRoute><MyAccount /></PrivateRoute>} />
-                    <Route path="/learn/:courseId/lesson/:lessonId" element={<PrivateRoute><LessonView /></PrivateRoute>} />
+  // Display a spinner for the entire page while initial user data is loading
+  if (loading) {
+    return <Spinner />;
+  }
 
-                    <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-                    <Route path="/admin/course/new" element={<AdminRoute><AdminCourseEditor /></AdminRoute>} />
-                    <Route path="/admin/course/:id" element={<AdminRoute><AdminCourseEditor /></AdminRoute>} />
-                </Routes>
-            </main>
-            <Footer />
-        </div>
-    );
+  return (
+    <div className="flex flex-col min-h-screen">
+      <Header />
+      <main className="flex-grow">
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:resettoken" element={<ResetPassword />} />
+          <Route path="/courses" element={<CourseCatalog />} />
+          <Route path="/courses/:id" element={<CourseDetail />} />
+          <Route path="/blog" element={<Blog />} />
+          <Route path="/blog/:slug" element={<BlogPost />} />
+          <Route path="/author/:id" element={<AuthorProfile />} />
+          <Route path="/payment-success" element={<PaymentSuccess />} />
+
+          {/* Protected User Routes */}
+          <Route path="/dashboard" element={<PrivateRoute><UserDashboard /></PrivateRoute>} />
+          <Route path="/account" element={<PrivateRoute><MyAccount /></PrivateRoute>} />
+          <Route path="/learn/:courseId/lesson/:lessonId" element={<PrivateRoute><LessonView /></PrivateRoute>} />
+
+          {/* Protected Admin Routes */}
+          <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/course/new" element={<AdminRoute><AdminCourseEditor /></AdminRoute>} />
+          <Route path="/admin/course/:id" element={<AdminRoute><AdminCourseEditor /></AdminRoute>} />
+        </Routes>
+      </main>
+      <Footer />
+    </div>
+  );
 }
 
 export default App;
