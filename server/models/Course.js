@@ -63,8 +63,9 @@ const CourseSchema = new mongoose.Schema({
     lessons: [LessonSchema],
     tags: [{ type: String }],
     
-    // CORRECTED: This field identifies the course creator (the author).
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    // THIS IS THE FIX: I have removed 'required: true' from this line.
+    // This allows old courses without an author to load without crashing the server.
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
     // NEW: This field will store an array of students enrolled in the course.
     students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
