@@ -2,22 +2,25 @@
 
 import { Navigate, Outlet } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-// THIS IS THE CORRECTED LINE:
-import { jwtDecode } from 'jwt-decode'; // Changed from default to named import
+// THIS IS THE FIX:
+import { jwtDecode } from 'jwt-decode';
 
 const AdminRoute = () => {
     const { userInfo } = useSelector((state) => state.auth);
 
     if (userInfo && userInfo.token) {
-        // Use the imported function to decode the token
-        const decodedToken = jwtDecode(userInfo.token);
-        // Check if the user is an admin
-        if (decodedToken.isAdmin) {
-            return <Outlet />;
+        try {
+            const decodedToken = jwtDecode(userInfo.token);
+            // Check if the user is an admin AND the token is not expired
+            if (decodedToken.isAdmin && decodedToken.exp * 1000 > Date.now()) {
+                return <Outlet />;
+            }
+        } catch (error) {
+            console.error("Invalid token in AdminRoute:", error);
+            return <Navigate to="/login" replace />;
         }
     }
 
-    // If not an admin, or no token, redirect to the login page
     return <Navigate to="/login" replace />;
 };
 

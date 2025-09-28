@@ -1,9 +1,26 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
+// File: client/src/components/PrivateRoute.jsx
 
-const PrivateRoute = ({ children }) => {
-    const isAuthenticated = !!localStorage.getItem('token');
-    return isAuthenticated ? children : <Navigate to="/login" replace />;
+import { Navigate, Outlet } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+// THIS IS THE FIX:
+import { jwtDecode } from 'jwt-decode';
+
+const PrivateRoute = () => {
+    const { userInfo } = useSelector((state) => state.auth);
+
+    if (userInfo && userInfo.token) {
+        try {
+            const decodedToken = jwtDecode(userInfo.token);
+            if (decodedToken.exp * 1000 > Date.now()) {
+                return <Outlet />;
+            }
+        } catch (error) {
+            console.error("Invalid token in PrivateRoute:", error);
+            return <Navigate to="/login" replace />;
+        }
+    }
+    
+    return <Navigate to="/login" replace />;
 };
 
 export default PrivateRoute;
