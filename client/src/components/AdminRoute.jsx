@@ -2,7 +2,7 @@
 
 import { Navigate, Outlet } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-// THIS IS THE FIX: We now use a named import and alias it.
+// THIS IS THE FIX: We now use a named import and alias it to match the existing code.
 import { jwtDecode as jwt_decode } from 'jwt-decode';
 
 const AdminRoute = () => {
