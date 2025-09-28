@@ -1,13 +1,9 @@
-// File: client/vite.config.js
-
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from "path";
 
 export default defineConfig({
-  // Ensures all asset paths in the final build are absolute (e.g., /assets/index.js)
   base: '/',
-
   plugins: [react()],
   resolve: {
     alias: {
