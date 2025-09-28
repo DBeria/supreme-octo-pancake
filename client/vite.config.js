@@ -6,7 +6,8 @@ import path from "path";
 
 export default defineConfig({
   // THIS IS THE CRITICAL FIX:
-  // This tells Vite that all asset paths should start from the root of the domain ('/').
+  // It ensures all asset paths in the final build start with "/",
+  // so the browser can find your JS and CSS files from any page.
   base: '/',
 
   plugins: [react()],

@@ -2,22 +2,20 @@
 
 # This is the single source of truth for your build settings.
 [build]
-  # 1. First, navigate into the 'client' folder.
-  # 2. Then, install all necessary dependencies.
-  # 3. Finally, run the build command.
+  # This command ensures all client dependencies are installed before building.
   command = "cd client && npm install && npm run build"
   
-  # 2. After the build, the final public website is in the 'client/dist' folder.
+  # This tells Netlify where to find your finished website.
   publish = "client/dist"
 
-# Rule 1: The API Proxy for your live server.
+# Rule 1: The API Proxy (for connecting to your backend)
 [[redirects]]
   from = "/api/*"
   to = "https://pocus-world-backend.onrender.com/api/:splat"
   status = 200
 
-# Rule 2: The Single-Page App (SPA) rule for React Router.
-# This ensures that refreshing on any page works correctly.
+# Rule 2: The SPA Catch-All (for React Router)
+# This is VITAL. It ensures refreshing on any page works.
 [[redirects]]
   from = "/*"
   to = "/index.html"
