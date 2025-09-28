@@ -2,14 +2,16 @@
 
 const express = require('express');
 const dotenv = require('dotenv');
-const connectDB = require('./config/db.js');
-const cors = require('cors');
 const path = require('path');
+const cors = require('cors');
+const connectDB = require('./config/db.js');
 
-// THIS IS THE FIX: Using simple, explicit relative paths with the .js extension.
-const courseRoutes = require('./routes/courseRoutes.js');
-const userRoutes = require('./routes/userRoutes.js');
-const { notFound, errorHandler } = require('./middleware/errorMiddleware.js');
+// --- THIS IS THE FIX ---
+// We use the built-in __dirname variable to create absolute paths
+// to the required modules. This is the most reliable method for production.
+const courseRoutes = require(path.join(__dirname, 'routes', 'courseRoutes.js'));
+const userRoutes = require(path.join(__dirname, 'routes', 'userRoutes.js'));
+const { notFound, errorHandler } = require(path.join(__dirname, 'middleware', 'errorMiddleware.js'));
 
 dotenv.config();
 
