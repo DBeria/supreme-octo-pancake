@@ -7,3 +7,5 @@ export const apiSlice = createApi({
   tagTypes: ['User', 'Course'],
   endpoints: (builder) => ({}),
 });
+
+//name corrected
