@@ -2,15 +2,15 @@
 
 import { Navigate, Outlet } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-// THIS IS THE FIX: We now use a named import and alias it to match the existing code.
-import { jwtDecode as jwt_decode } from 'jwt-decode';
+// THIS IS THE FIX: We now use a named import which is compatible with the build process.
+import { jwtDecode } from 'jwt-decode';
 
 const PrivateRoute = () => {
     const { userInfo } = useSelector((state) => state.auth);
 
     if (userInfo && userInfo.token) {
         try {
-            const decodedToken = jwt_decode(userInfo.token);
+            const decodedToken = jwtDecode(userInfo.token);
             if (decodedToken.exp * 1000 > Date.now()) {
                 return <Outlet />;
             }
