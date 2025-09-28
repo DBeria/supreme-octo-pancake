@@ -1,6 +1,6 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { useSelector } from 'react-redux'; // Import useSelector
+import { useSelector } from 'react-redux';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import PrivateRoute from './components/PrivateRoute';
@@ -21,13 +21,12 @@ import Blog from './pages/Blog';
 import BlogPost from './pages/BlogPost';
 import AuthorProfile from './pages/AuthorProfile';
 import PaymentSuccess from './pages/PaymentSuccess';
-import Spinner from './components/Spinner';
+// THIS IS THE CORRECTED LINE:
+import Spinner from './components/common/Spinner';
 
 function App() {
-  // Get the authentication state from the Redux store
-  const { loading } = useSelector((state) => state.auth);
+  const { userInfo, loading } = useSelector((state) => state.auth);
 
-  // Display a spinner for the entire page while initial user data is loading
   if (loading) {
     return <Spinner />;
   }
@@ -37,7 +36,6 @@ function App() {
       <Header />
       <main className="flex-grow">
         <Routes>
-          {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -50,12 +48,10 @@ function App() {
           <Route path="/author/:id" element={<AuthorProfile />} />
           <Route path="/payment-success" element={<PaymentSuccess />} />
 
-          {/* Protected User Routes */}
           <Route path="/dashboard" element={<PrivateRoute><UserDashboard /></PrivateRoute>} />
           <Route path="/account" element={<PrivateRoute><MyAccount /></PrivateRoute>} />
           <Route path="/learn/:courseId/lesson/:lessonId" element={<PrivateRoute><LessonView /></PrivateRoute>} />
 
-          {/* Protected Admin Routes */}
           <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
           <Route path="/admin/course/new" element={<AdminRoute><AdminCourseEditor /></AdminRoute>} />
           <Route path="/admin/course/:id" element={<AdminRoute><AdminCourseEditor /></AdminRoute>} />
