@@ -5,9 +5,7 @@ import react from '@vitejs/plugin-react';
 import path from "path";
 
 export default defineConfig({
-  // THIS IS THE CRITICAL FIX:
-  // It ensures all asset paths in the final build start with "/",
-  // so the browser can find your JS and CSS files from any page.
+  // Ensures all asset paths in the final build are absolute (e.g., /assets/index.js)
   base: '/',
 
   plugins: [react()],

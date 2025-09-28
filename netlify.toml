@@ -1,6 +1,5 @@
 # File: netlify.toml
 
-# This is the single source of truth for your build settings.
 [build]
   # This command ensures all client dependencies are installed before building.
   command = "cd client && npm install && npm run build"
