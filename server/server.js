@@ -3,9 +3,12 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
-const courseRoutes = require('./routes/courseRoutes');
-const userRoutes = require('./routes/userRoutes');
-const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+
+// THIS IS THE FIX: Added '.js' to the end of the file paths.
+const courseRoutes = require('./routes/courseRoutes.js');
+const userRoutes = require('./routes/userRoutes.js');
+
+const { notFound, errorHandler } = require('./middleware/errorMiddleware.js');
 const path = require('path');
 const cors = require('cors');
 
@@ -21,13 +24,8 @@ app.use(cors());
 app.use(express.json());
 
 // --- API Routes ---
-// The server's only job is to handle these routes.
 app.use('/api/courses', courseRoutes);
 app.use('/api/users', userRoutes);
-
-// --- THIS IS THE FIX ---
-// The incorrect code block that tried to serve the frontend has been completely removed.
-// Now, the server will not crash in a production environment.
 
 // The root path now simply confirms the API is running.
 app.get('/', (req, res) => {
