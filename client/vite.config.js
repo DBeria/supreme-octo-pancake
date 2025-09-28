@@ -5,9 +5,8 @@ import react from '@vitejs/plugin-react';
 import path from "path";
 
 export default defineConfig({
-  // THIS IS THE FIX:
-  // We are explicitly telling Vite that in production, all asset paths
-  // should start from the root of the domain ('/').
+  // THIS IS THE CRITICAL FIX:
+  // This tells Vite that all asset paths should start from the root of the domain ('/').
   base: '/',
 
   plugins: [react()],

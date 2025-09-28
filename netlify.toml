@@ -1,17 +1,14 @@
 # File: netlify.toml
 
-# This is the final, correct build configuration.
+# This is the single source of truth for your build settings.
 [build]
-  # This command chains all necessary steps together:
-  # 1. cd client       -> Navigate into the client folder.
-  # 2. npm install     -> Install all client-side dependencies (including Vite).
-  # 3. npm run build   -> Now run the build, which will find the vite command.
+  # 1. First, navigate into the 'client' folder.
+  # 2. Then, install all necessary dependencies.
+  # 3. Finally, run the build command.
   command = "cd client && npm install && npm run build"
   
-  # The final, published site is in the client/dist directory.
+  # 2. After the build, the final public website is in the 'client/dist' folder.
   publish = "client/dist"
-
-# --- Keep these redirect rules exactly as they are ---
 
 # Rule 1: The API Proxy for your live server.
 [[redirects]]
@@ -20,6 +17,7 @@
   status = 200
 
 # Rule 2: The Single-Page App (SPA) rule for React Router.
+# This ensures that refreshing on any page works correctly.
 [[redirects]]
   from = "/*"
   to = "/index.html"
