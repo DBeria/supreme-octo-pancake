@@ -1,4 +1,4 @@
-// client/src/features/api/apiSlice.js - FINAL AND COMPLETE
+// client/src/features/apiSlice.js - FINAL CORRECTED FILE
 
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 

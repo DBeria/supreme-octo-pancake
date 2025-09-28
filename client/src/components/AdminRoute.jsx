@@ -3,7 +3,7 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 // THIS IS THE FIX: Using the correct 'named' import and aliasing it.
-import { jwtDecode as jwt_decode } from 'jwt-decode';
+import jwt_decode from "jwt-decode";
 
 const AdminRoute = () => {
     const { userInfo } = useSelector((state) => state.auth);
