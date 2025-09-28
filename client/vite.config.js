@@ -4,7 +4,6 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from "path"
 
-// THIS CONFIG IS FOR YOUR LOCAL DEVELOPMENT ONLY
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -19,6 +18,8 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    // UPDATED: Added Render.com to the list of allowed hosts
+    allowedHosts: ['.netlify.app', '.onrender.com', 'localhost'],
   },
   build: {
     rollupOptions: {
