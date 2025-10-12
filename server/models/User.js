@@ -45,7 +45,9 @@ const UserSchema = new mongoose.Schema({
         progress: [QuizProgressSchema]
     }],
     resetPasswordToken: String,
-    resetPasswordExpire: Date
+    resetPasswordExpire: Date,
+    avatarUrl: { type: String, default: '' },
+    bio: { type: String, default: '' }
 }, { timestamps: true });
 
 UserSchema.pre('save', async function (next) {

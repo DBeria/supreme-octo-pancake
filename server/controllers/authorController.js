@@ -70,3 +70,40 @@ exports.getAllAuthors = async (req, res) => {
         res.status(500).json({ message: 'Server Error' });
     }
 };
+
+// @desc    Upload/update my profile photo
+// @route   PUT /api/authors/my-profile/photo
+// @access  Private/Admin
+exports.uploadPhoto = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    let author = await Author.findOne({ user: req.user.id });
+    if (!author) {
+      author = new Author({ user: req.user.id, fullName: req.user.name });
+    }
+    // Store as URL path to static uploads
+    author.profilePicture = `/uploads/${req.file.filename}`;
+    await author.save();
+    res.json(author);
+  } catch (err) {
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+// @desc    Upload/update my CV
+// @route   PUT /api/authors/my-profile/cv
+// @access  Private/Admin
+exports.uploadCV = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    let author = await Author.findOne({ user: req.user.id });
+    if (!author) {
+      author = new Author({ user: req.user.id, fullName: req.user.name });
+    }
+    author.cvUrl = `/uploads/${req.file.filename}`;
+    await author.save();
+    res.json(author);
+  } catch (err) {
+    res.status(500).json({ message: 'Server Error' });
+  }
+};

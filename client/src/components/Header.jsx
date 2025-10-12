@@ -1,6 +1,6 @@
 // client/src/components/Header.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { User, LogOut, Settings, Menu, X } from 'lucide-react';
 
 const SunIcon = () => (
@@ -24,7 +24,25 @@ const Header = () => {
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
 
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
+  const location = useLocation();
   const loggedIn = !!user;
+
+  
+  // Sync user from localStorage on navigation/storage/focus so header updates after login
+  useEffect(() => {
+    const sync = () => setUser(() => {
+      try { return JSON.parse(localStorage.getItem('user')) || null } catch { return null }
+    });
+    sync();
+    const onStorage = (e) => { if (e.key === 'user' || e.key === 'token' || e.key === 'userInfo') sync(); };
+    const onFocus = () => sync();
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [location.pathname]);
 
   // Theme handling
   useEffect(() => {
@@ -43,12 +61,24 @@ const Header = () => {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    setUser(null);
-    setIsMenuOpen(false);
-    setIsMobileMenuOpen(false);
-    navigate('/login');
+    try {
+      // Redux (if mounted)
+      try {
+        const { store } = require('@/app/store'); // optional
+        const { logout } = require('@/features/authSlice');
+        if (store && store.dispatch) store.dispatch(logout());
+      } catch {}
+
+      // Clear everything
+      if (window?.localStorage) {
+        for (const k of ['token','authToken','jwt','userInfo','user']) localStorage.removeItem(k);
+      }
+    } finally {
+      setUser(null);
+      setIsMenuOpen(false);
+      setIsMobileMenuOpen(false);
+      navigate('/login', { replace: true });
+    }
   };
 
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
@@ -70,7 +100,7 @@ const Header = () => {
           {loggedIn && user ? (
             <>
               {user.role === 'admin' ? (
-                <Link to="/admin/course/new" className="px-4 py-2 rounded-lg text-white font-semibold bg-purple-600 hover:bg-purple-700 transition">Admin</Link>
+                <Link to="/admin" className="px-4 py-2 rounded-lg text-white font-semibold bg-purple-600 hover:bg-purple-700 transition">Admin</Link>
               ) : (
                 <Link to="/dashboard" className="px-4 py-2 rounded-lg text-white font-semibold bg-blue-600 hover:bg-blue-700 transition">Dashboard</Link>
               )}
@@ -105,7 +135,7 @@ const Header = () => {
             {loggedIn && user ? (
               <>
                 {user.role === 'admin' ? (
-                  <Link to="/admin/course/new" onClick={toggleMobileMenu} className="w-full text-center py-2 text-white bg-purple-600 rounded-lg hover:bg-purple-700">Admin</Link>
+                  <Link to="/admin" onClick={toggleMobileMenu} className="w-full text-center py-2 text-white bg-purple-600 rounded-lg hover:bg-purple-700">Admin</Link>
                 ) : (
                   <Link to="/dashboard" onClick={toggleMobileMenu} className="w-full text-center py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700">Dashboard</Link>
                 )}

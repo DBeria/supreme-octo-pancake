@@ -50,13 +50,17 @@ const getAllCourses = async (req, res) => {
 const getCourseById = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id)
-             .populate('createdBy', 'name fullName profilePicture');
+             .populate('createdBy', 'name email');
 
-        if (course) {
-            res.json(course);
-        } else {
-            res.status(404).json({ message: 'Course not found' });
-        }
+        if (!course) return res.status(404).json({ message: 'Course not found' });
+
+        // Attach author profile (bio/photo) based on the user who created the course
+        const creatorId = (course.createdBy && course.createdBy._id) ? course.createdBy._id : course.createdBy;
+        let authorProfile = await Author.findOne({ user: creatorId }).lean();
+        const payload = course.toObject();
+        payload.authorProfile = authorProfile || null;
+
+        res.json(payload);
     } catch (error) {
         res.status(500).json({ message: 'Server Error' });
     }

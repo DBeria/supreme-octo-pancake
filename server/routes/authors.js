@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getOrCreateMyProfile, getAuthorById, updateMyProfile } = require('../controllers/authorController');
+const { getOrCreateMyProfile, getAuthorById, updateMyProfile, uploadPhoto, uploadCV } = require('../controllers/authorController');
 const { protect } = require('../middleware/authMiddleware');
 const { admin } = require('../middleware/adminMiddleware');
 
@@ -13,3 +13,10 @@ router.route('/my-profile')
 router.route('/:id').get(getAuthorById);
 
 module.exports = router;
+
+
+const { photoUpload, cvUpload } = require('../middleware/upload');
+
+// Dedicated upload endpoints with per-file limits
+router.put('/my-profile/photo', protect, admin, photoUpload.single('photo'), uploadPhoto);
+router.put('/my-profile/cv', protect, admin, cvUpload.single('cv'), uploadCV);

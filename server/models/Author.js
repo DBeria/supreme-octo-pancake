@@ -17,8 +17,9 @@ const authorSchema = new mongoose.Schema({
     },
     profilePicture: {
         type: String, // URL to the image
-        default: '/default-avatar.png',
+        default: '/uploads/default-avatar.png',
     },
+    cvUrl: { type: String, default: '' },
 }, {
     timestamps: true,
 });

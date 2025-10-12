@@ -12,6 +12,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import UserDashboard from './pages/UserDashboard';
 import AdminCourseEditor from './pages/AdminCourseEditor';
+import AdminDashboard from './pages/AdminDashboard';
 import CourseCatalog from './pages/CourseCatalog';
 import CourseDetail from './pages/CourseDetail';
 import LessonView from './pages/LessonView';
@@ -55,7 +56,7 @@ function App() {
           {/* Admin routes */}
           <Route path="/admin/course/new" element={<AdminRoute><AdminCourseEditor /></AdminRoute>} />
           <Route path="/admin/course/:id" element={<AdminRoute><AdminCourseEditor /></AdminRoute>} />
-          <Route path="/admin" element={<AdminRoute><AdminCourseEditor /></AdminRoute>} />
+          <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
         </Routes>
       </main>
       <Footer />

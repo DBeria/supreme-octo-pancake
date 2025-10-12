@@ -12,6 +12,8 @@ const getUserProfile = async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
+            bio: user.bio,
+            avatarUrl: user.avatarUrl,
             enrolledCourses: user.enrolledCourses,
         });
     } else {
