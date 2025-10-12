@@ -4,7 +4,7 @@ import axios from 'axios';
 import html2canvas from 'html2canvas';
 import { saveAs } from 'file-saver';
 import { ChevronDownIcon, ArrowLeftIcon, ArrowRightIcon, CheckCircleIcon, XCircleIcon, Download } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from "../components/ui/button";
 // Helper function to safely parse integer (not used in this version)
 /* const safeParseInt = (value) => parseInt(value, 10) || 0; */
 // You can remove the scale and EDITOR_BASE_WIDTH states

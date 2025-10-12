@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { setCredentials } from '@/features/authSlice';
+import { setCredentials } from "../features/authSlice";
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });

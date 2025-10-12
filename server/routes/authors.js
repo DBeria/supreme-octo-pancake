@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getOrCreateMyProfile, getAuthorById, updateMyProfile, uploadPhoto, uploadCV } = require('../controllers/authorController');
+const { getOrCreateMyProfile, getAuthorById, updateMyProfile, uploadPhoto, uploadCV, getAuthorByUserId} = require('../controllers/authorController');
 const { protect } = require('../middleware/authMiddleware');
 const { admin } = require('../middleware/adminMiddleware');
 
@@ -11,6 +11,9 @@ router.route('/my-profile')
 
 // Public route to get any author's profile
 router.route('/:id').get(getAuthorById);
+
+// Public: get author by USER id
+router.get('/by-user/:userId', getAuthorByUserId);
 
 module.exports = router;
 

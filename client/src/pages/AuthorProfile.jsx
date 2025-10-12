@@ -14,11 +14,15 @@ const AuthorProfile = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const authorRes = await axios.get(`/api/authors/${id}`);
+                const authorRes = await axios.get(`/api/authors/by-user/${id}`);
                 setAuthor(authorRes.data);
 
                 const coursesRes = await axios.get('/api/courses');
-                setCourses(coursesRes.data.filter(course => course.creator?._id === id));
+                setCourses(coursesRes.data.filter(c => {
+                    const created = c.createdBy;
+                    const creatorId = (created && typeof created === 'object') ? created._id : created;
+                    return String(creatorId) === String(id);
+                }));
             } catch (err) {
                 console.error('Failed to fetch author data', err);
                 setError('Could not load author profile.');
@@ -103,7 +107,28 @@ const AuthorProfile = () => {
                         </div>
                     )}
                 </div>
-            </main>
+            
+            {/* CV Preview / Download */}
+            {author.cvUrl && (
+              <section className="max-w-5xl mx-auto px-6 mt-6">
+                <h3 className="text-xl font-semibold mb-2 text-slate-800 dark:text-slate-200">Curriculum Vitae</h3>
+                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm text-slate-600 dark:text-slate-300 break-all">{author.cvUrl}</span>
+                    <a href={author.cvUrl} target="_blank" rel="noreferrer" className="px-3 py-1 rounded bg-cyan-600 text-white text-sm">Open</a>
+                  </div>
+                  <div className="w-full h-[600px] bg-slate-100 dark:bg-slate-900 rounded overflow-hidden">
+                    <object data={author.cvUrl} type="application/pdf" width="100%" height="100%">
+                      <p className="p-4 text-slate-600 dark:text-slate-300">
+                        PDF preview is not available. <a className="text-cyan-600 underline" href={author.cvUrl} target="_blank" rel="noreferrer">Click here to download.</a>
+                      </p>
+                    </object>
+                  </div>
+                </div>
+              </section>
+            )}
+          </main>
+        
         </div>
     );
 };

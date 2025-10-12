@@ -1,7 +1,12 @@
 const Course = require('../models/Course');
 const User = require('../models/User');
 const Author = require('../models/Author'); // Needed for the course converter
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const Stripe = require('stripe');
+const stripeKey = process.env.STRIPE_SECRET_KEY;
+if (!stripeKey) {
+  console.warn('[Stripe] STRIPE_SECRET_KEY is missing — payments disabled.');
+}
+const stripe = stripeKey ? new Stripe(stripeKey) : null;
 
 // @desc    Create a new course
 // @route   POST /api/courses

@@ -107,3 +107,19 @@ exports.uploadCV = async (req, res) => {
     res.status(500).json({ message: 'Server Error' });
   }
 };
+
+
+// @desc    Get an author's profile by USER id
+// @route   GET /api/authors/by-user/:userId
+// @access  Public
+exports.getAuthorByUserId = async (req, res) => {
+    try {
+        const author = await Author.findOne({ user: req.params.userId }).populate('user', 'name email');
+        if (!author) {
+            return res.status(404).json({ message: 'Author not found' });
+        }
+        res.json(author);
+    } catch (error) {
+        res.status(500).json({ message: 'Server Error' });
+    }
+};

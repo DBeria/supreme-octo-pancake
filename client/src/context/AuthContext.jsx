@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import api from "@/lib/api";
-import { clearAllAuth, getToken, getUser, saveAuth } from "@/lib/authStorage";
+import api from "../lib/api";
+import { clearAllAuth, getToken, getUser, saveAuth } from "../lib/authStorage";
 
 const AuthContext = createContext(null);
 

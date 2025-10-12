@@ -4,9 +4,9 @@ import axios from 'axios';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-hot-toast';
 import { BookOpen } from 'lucide-react';
-import { Button } from '@/components/ui/button.jsx';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx';
-import { Skeleton } from '@/components/ui/skeleton.jsx';
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Skeleton } from "../components/ui/skeleton";
 
 const CourseDetail = () => {
   const { id } = useParams();

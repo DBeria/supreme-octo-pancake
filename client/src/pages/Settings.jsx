@@ -1,11 +1,55 @@
 import React, { useState } from "react";
-import { useAuth } from "@/context/AuthContext";
+import axios from 'axios';
+import { getToken } from "../lib/authStorage";
+import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
 export default function Settings() {
   const { user, logout } = useAuth();
   const [confirm, setConfirm] = useState(false);
   const nav = useNavigate();
+
+  
+  const [photoFile, setPhotoFile] = useState(null);
+  const [cvFile, setCvFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const putFile = async (url, fieldName, file) => {
+    const fd = new FormData();
+    fd.append(fieldName, file);
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    return axios.put(url, fd, { headers });
+  };
+
+  const handlePhotoUpload = async (e) => {
+    e.preventDefault();
+    if (!photoFile) return;
+    setSaving(true); setMsg("");
+    try {
+      await putFile('/api/authors/my-profile/photo', 'photo', photoFile);
+      setMsg('Profile photo updated.');
+    } catch (err) {
+      setMsg(err?.response?.data?.message || 'Failed to upload photo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCvUpload = async (e) => {
+    e.preventDefault();
+    if (!cvFile) return;
+    setSaving(true); setMsg("");
+    try {
+      await putFile('/api/authors/my-profile/cv', 'cv', cvFile);
+      setMsg('CV uploaded.');
+    } catch (err) {
+      setMsg(err?.response?.data?.message || 'Failed to upload CV');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const doLogout = () => {
     logout();
