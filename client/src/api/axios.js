@@ -1,14 +1,23 @@
 import axios from 'axios';
 
-/**
- * In production (Netlify), set VITE_API_BASE_URL to your Render API URL, e.g.:
- * https://your-render-service.onrender.com/api
- *
- * In dev, this will default to "/api" and go through Vite proxy (vite.config.js).
- */
+// Prefer env override; fallback to your Render URL
+const DEFAULT_BASE = 'https://pocus-world-backend.onrender.com';
+const baseURL =
+  (typeof import.meta !== 'undefined' &&
+    import.meta.env &&
+    (import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL)) ||
+  DEFAULT_BASE;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  withCredentials: false,
+  baseURL,
+  withCredentials: true, // allow cookies if backend sets them
+});
+
+// Optional: attach auth token if you store it
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
 });
 
 export default api;
