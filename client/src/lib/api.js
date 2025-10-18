@@ -1,20 +1,10 @@
-// client/src/lib/api.js
-import axios from 'axios';
-import { getToken } from './authStorage';
+import axios from 'axios'
 
+// In production, VITE_API_BASE_URL must be set in Netlify env to your Render URL.
+// Locally, your dev proxy still works (= '/api').
 const api = axios.create({
-  baseURL: '/', // proxy handles /api to backend
-  withCredentials: true,
-});
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  withCredentials: true, // if using cookies; remove if not needed
+})
 
-// Attach token if present
-api.interceptors.request.use((config) => {
-  const tok = getToken();
-  if (tok) {
-    config.headers = config.headers || {};
-    config.headers.Authorization = `Bearer ${tok}`;
-  }
-  return config;
-});
-
-export default api;
+export default api
