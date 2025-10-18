@@ -41,11 +41,27 @@ const getAdminCourses = async (req, res) => {
 };
 
 // @desc    Get all active courses for public view
+// --- THIS FUNCTION HAS BEEN MODIFIED ---
 const getAllCourses = async (req, res) => {
     try {
+        // 1. Get all public, non-deleted courses (your original query)
         const courses = await Course.find({ isPublic: true, status: { $ne: 'deleted' } })
             .populate('createdBy', 'name fullName profilePicture');
+
+        // 2. Check if the user is an admin (from optionalAuth middleware)
+        if (req.user && req.user.role === 'admin') {
+            // If admin, map over courses to make them all appear free
+            const adminViewCourses = courses.map(course => {
+                const courseObject = course.toObject(); // Convert to plain object
+                courseObject.isFree = true; // Set isFree to true
+                return courseObject;
+            });
+            return res.json(adminViewCourses);
+        }
+
+        // 3. For all other users, return the original course data
         res.json(courses);
+
     } catch (error) {
         res.status(500).json({ message: 'Server Error' });
     }
@@ -55,7 +71,7 @@ const getAllCourses = async (req, res) => {
 const getCourseById = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id)
-             .populate('createdBy', 'name email');
+            .populate('createdBy', 'name email');
 
         if (!course) return res.status(404).json({ message: 'Course not found' });
 

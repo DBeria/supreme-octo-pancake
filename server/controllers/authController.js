@@ -160,11 +160,10 @@ exports.forgotPassword = async (req, res) => {
         const resetToken = user.getResetPasswordToken();
         await user.save({ validateBeforeSave: false });
 
-        // ** THIS LINE IS NOW CORRECTED WITH YOUR DOMAIN **
-        const resetUrl = `https://pocusworld.netlify.app/reset-password/${resetToken}`;
+        const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
 
         const message = `You are receiving this email because you requested a password reset. Please click the link to reset your password: ${resetUrl}`;
-        await sendEmail({ email: user.email, subject: 'Password Reset', message });
+      await sendEmail({ email: user.email, subject: 'Password Reset', message });
         res.status(200).json({ message: 'Email sent' });
     } catch (err) {
         res.status(500).json({ message: 'Email could not be sent' });

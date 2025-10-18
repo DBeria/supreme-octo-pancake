@@ -7,11 +7,11 @@ import {
 } from 'lucide-react';
 
 /**
- * Ensures file URLs (e.g., `/uploads/xxx.pdf`) point to the server, not the Vite dev host.
- * Set VITE_SERVER_URL in your client `.env` during dev, e.g.:
- *   VITE_SERVER_URL=http://localhost:5000
+ * Ensures file URLs (e.g., /uploads/xxx.pdf) point to the server, not the Vite dev host.
+ * Set VITE_SERVER_URL in your client .env during dev, e.g.:
+ * VITE_SERVER_URL=http://localhost:5000
  */
-const SERVER_BASE = (import.meta?.env?.VITE_SERVER_URL || '').replace(/\/+$/,''); // no trailing slash
+const SERVER_BASE = (import.meta?.env?.VITE_SERVER_URL || '').replace(/\/+$/, ''); // no trailing slash
 const toFileURL = (p) => {
   if (!p) return '';
   // If already absolute (http/https), return as-is

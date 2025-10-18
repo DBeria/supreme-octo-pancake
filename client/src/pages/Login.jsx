@@ -19,13 +19,17 @@ const Login = () => {
     setLoading(true);
     try {
       const res = await axios.post('/api/auth/login', formData);
-      const { token, _id, name, email, role } = res.data || {}; const user = { _id, name, email, role };
+      const { token, _id, name, email, role } = res.data || {};
+      const user = { _id, name, email, role };
       if (!token) throw new Error('Missing token from server');
+      
       // Persist for axios interceptor + legacy
       localStorage.setItem('token', token);
       if (user) localStorage.setItem('user', JSON.stringify(user));
+
       // Also keep redux in sync for PrivateRoute/AdminRoute
       dispatch(setCredentials({ token, ...user }));
+
       // Route by role
       if (user?.role === 'admin') navigate('/admin', { replace: true });
       else navigate('/dashboard', { replace: true });
@@ -38,27 +42,30 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-white dark:bg-slate-900 shadow rounded-xl p-6 space-y-6">
-        <h1 className="text-2xl font-semibold text-center">Sign in</h1>
-        {error && <div className="p-3 rounded bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-200 text-sm">{error}</div>}
-        <form onSubmit={onSubmit} className="space-y-4">
+    <div className="min-h-[70vh] flex items-center justify-center bg-gray-100 dark:bg-gray-900 px-4">
+      <div className="w-full max-w-md bg-white dark:bg-slate-800 shadow-xl rounded-2xl p-8 space-y-6">
+        <h1 className="text-3xl font-bold text-center text-gray-900 dark:text-white">Sign in to POCUS World</h1>
+        {error && <div className="p-3 rounded-lg bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 text-sm font-medium text-center">{error}</div>}
+        <form onSubmit={onSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm mb-1">Email</label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Email</label>
             <input name="email" type="email" required value={formData.email} onChange={onChange}
-              className="w-full rounded-lg border px-3 py-2 bg-white dark:bg-slate-800" placeholder="you@example.com" />
+              className="w-full rounded-lg border border-gray-300 dark:border-slate-600 px-4 py-3 bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition" placeholder="you@example.com" />
           </div>
           <div>
-            <label className="block text-sm mb-1">Password</label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Password</label>
             <input name="password" type="password" required value={formData.password} onChange={onChange}
-              className="w-full rounded-lg border px-3 py-2 bg-white dark:bg-slate-800" placeholder="••••••••" />
+              className="w-full rounded-lg border border-gray-300 dark:border-slate-600 px-4 py-3 bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition" placeholder="••••••••" />
           </div>
-          <button disabled={loading} type="submit" className="w-full rounded-lg py-2 border font-medium disabled:opacity-60">
-            {loading ? 'Signing in…' : 'Login'}
+          <div className="text-right">
+            <Link to="/forgot-password" className="text-sm font-medium text-blue-600 hover:underline">Forgot Password?</Link>
+          </div>
+          <button disabled={loading} type="submit" className="w-full rounded-lg py-3 bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-transform transform hover:scale-105 disabled:opacity-50 disabled:scale-100">
+            {loading ? 'Signing in...' : 'Login'}
           </button>
         </form>
-        <p className="text-center text-sm">
-          Don&apos;t have an account? <Link to="/register" className="text-blue-600">Register</Link>
+        <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+          Don't have an account? <Link to="/register" className="font-semibold text-blue-600 hover:underline">Register</Link>
         </p>
       </div>
     </div>

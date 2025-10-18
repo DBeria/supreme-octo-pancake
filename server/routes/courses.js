@@ -16,11 +16,11 @@ const {
     submitFinalExam,
     saveCertificate,
     createCheckoutSession,
-    runMigration // Make sure runMigration is imported
+    runMigration
 } = require('../controllers/courseController');
 
 // Import middleware
-const { protect } = require('../middleware/authMiddleware');
+const { protect, optionalAuth } = require('../middleware/authMiddleware'); // <-- Import optionalAuth
 const { admin } = require('../middleware/adminMiddleware');
 const { isCourseOwner } = require('../middleware/courseMiddleware');
 
@@ -31,7 +31,8 @@ router.route('/admin-courses').get(protect, admin, getAdminCourses);
 router.route('/convert-old-courses').get(protect, admin, runMigration);
 
 // General public routes
-router.route('/').get(getAllCourses).post(protect, admin, createCourse);
+// Use optionalAuth here to check if the user is an admin
+router.route('/').get(optionalAuth, getAllCourses).post(protect, admin, createCourse);
 
 // Routes for a single course
 router.route('/:id').get(getCourseById).put(protect, admin, isCourseOwner, updateCourse).delete(protect, admin, isCourseOwner, deleteCourse);

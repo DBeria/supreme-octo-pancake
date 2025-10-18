@@ -10,13 +10,13 @@ exports.getOrCreateMyProfile = async (req, res) => {
         if (!author) {
             author = new Author({
                 user: req.user.id,
-                fullName: req.user.name, 
+                fullName: req.user.name,
             });
             await author.save();
         }
         res.json(author);
     } catch (error) {
-        console.error("Error in getOrCreateMyProfile:", error);
+        console.error('Error in getOrCreateMyProfile:', error);
         res.status(500).json({ message: 'Server Error', error: error.message });
     }
 };
@@ -37,7 +37,7 @@ exports.updateMyProfile = async (req, res) => {
         }
         res.json(author);
     } catch (error) {
-        console.error("Error updating author profile:", error);
+        console.error('Error updating author profile:', error);
         res.status(500).json({ message: 'Server Error', error: error.message });
     }
 };
