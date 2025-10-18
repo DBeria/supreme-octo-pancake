@@ -41,25 +41,22 @@ const getAdminCourses = async (req, res) => {
 };
 
 // @desc    Get all active courses for public view
-// --- THIS FUNCTION HAS BEEN MODIFIED ---
 const getAllCourses = async (req, res) => {
     try {
-        // 1. Get all public, non-deleted courses (your original query)
         const courses = await Course.find({ isPublic: true, status: { $ne: 'deleted' } })
             .populate('createdBy', 'name fullName profilePicture');
 
-        // 2. Check if the user is an admin (from optionalAuth middleware)
+        // Check if the user is an admin (from optionalAuth middleware)
         if (req.user && req.user.role === 'admin') {
-            // If admin, map over courses to make them all appear free
             const adminViewCourses = courses.map(course => {
-                const courseObject = course.toObject(); // Convert to plain object
+                const courseObject = course.toObject(); 
                 courseObject.isFree = true; // Set isFree to true
                 return courseObject;
             });
             return res.json(adminViewCourses);
         }
 
-        // 3. For all other users, return the original course data
+        // For all other users, return the original course data
         res.json(courses);
 
     } catch (error) {
@@ -68,6 +65,7 @@ const getAllCourses = async (req, res) => {
 };
 
 // @desc    Get course by ID
+// --- THIS FUNCTION HAS BEEN MODIFIED ---
 const getCourseById = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id)
@@ -80,6 +78,13 @@ const getCourseById = async (req, res) => {
         let authorProfile = await Author.findOne({ user: creatorId }).lean();
         const payload = course.toObject();
         payload.authorProfile = authorProfile || null;
+
+        // --- ADDED FIX ---
+        // Check if the user is an admin (from optionalAuth middleware)
+        if (req.user && req.user.role === 'admin') {
+            payload.isFree = true;
+        }
+        // --- END FIX ---
 
         res.json(payload);
     } catch (error) {
@@ -143,7 +148,7 @@ const permanentlyDeleteCourse = async (req, res) => {
     }
 };
 
-// @desc    Enroll user in a course
+// @desc    Enroll user in a course (for free courses)
 const enrollInCourse = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
@@ -162,10 +167,27 @@ const enrollInCourse = async (req, res) => {
 };
 
 // @desc    Create a Stripe checkout session
+// --- THIS FUNCTION HAS BEEN MODIFIED ---
 const createCheckoutSession = async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
         const user = await User.findById(req.user.id);
+
+        // 1. Check if already enrolled
+        if (user.enrolledCourses.some(c => c.course.toString() === course._id.toString())) {
+            return res.status(400).json({ message: 'Already enrolled' });
+        }
+
+        // 2. Handle free courses (incl. for admins)
+        // If the course is free (or the user is an admin), enroll them directly and redirect to dashboard
+        if (course.isFree || (req.user && req.user.role === 'admin')) {
+            user.enrolledCourses.push({ course: course._id });
+            await user.save();
+            // Send a URL to the dashboard, mimicking the Stripe URL response
+            return res.json({ url: `${process.env.CLIENT_URL}/dashboard?enrolled=${course._id}` });
+        }
+        
+        // 3. If not free, proceed to Stripe payment
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [{
@@ -190,6 +212,47 @@ const createCheckoutSession = async (req, res) => {
         res.status(500).json({ message: 'Server Error', error: error.message });
     }
 };
+
+// --- THIS IS THE NEW FUNCTION YOU NEED ---
+// @desc    Verify a Stripe session and enroll the user
+// @route   POST /api/courses/verify-payment
+// @access  Private
+const verifyPaymentSession = async (req, res) => {
+    try {
+        const { sessionId } = req.body;
+        if (!sessionId) {
+            return res.status(400).json({ message: 'Session ID is required.' });
+        }
+        
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+        if (session.payment_status === 'paid') {
+            const { courseId, userId } = session.metadata;
+
+            const user = await User.findById(userId);
+            if (!user) {
+                return res.status(404).json({ message: 'User not found.' });
+            }
+
+            // Check if already enrolled (idempotency check)
+            if (user.enrolledCourses.some(c => c.course.toString() === courseId)) {
+                return res.json({ success: true, message: 'Already enrolled.' });
+            }
+
+            // Enroll the user
+            user.enrolledCourses.push({ course: courseId });
+            await user.save();
+
+            res.json({ success: true, message: 'Payment successful and you are now enrolled!' });
+        } else {
+            res.status(400).json({ success: false, message: 'Payment not successful.' });
+        }
+    } catch (error) {
+        console.error('Error verifying payment:', error);
+        res.status(500).json({ message: 'Server Error', error: error.message });
+    }
+};
+
 
 // --- THIS IS THE COURSE CONVERTER ---
 const runMigration = async (req, res) => {
@@ -238,6 +301,7 @@ module.exports = {
     permanentlyDeleteCourse,
     enrollInCourse,
     createCheckoutSession,
+    verifyPaymentSession, // <-- ADD THIS TO YOUR EXPORTS
     runMigration,
     // Add these back if they are used elsewhere
     updateUserProgress: async (req, res) => res.status(501).json({ message: "Not implemented" }),

@@ -16,11 +16,12 @@ const {
     submitFinalExam,
     saveCertificate,
     createCheckoutSession,
+    verifyPaymentSession,
     runMigration
 } = require('../controllers/courseController');
 
 // Import middleware
-const { protect, optionalAuth } = require('../middleware/authMiddleware'); // <-- Import optionalAuth
+const { protect, optionalAuth } = require('../middleware/authMiddleware'); // Import optionalAuth
 const { admin } = require('../middleware/adminMiddleware');
 const { isCourseOwner } = require('../middleware/courseMiddleware');
 
@@ -31,16 +32,20 @@ router.route('/admin-courses').get(protect, admin, getAdminCourses);
 router.route('/convert-old-courses').get(protect, admin, runMigration);
 
 // General public routes
-// Use optionalAuth here to check if the user is an admin
 router.route('/').get(optionalAuth, getAllCourses).post(protect, admin, createCourse);
 
 // Routes for a single course
-router.route('/:id').get(getCourseById).put(protect, admin, isCourseOwner, updateCourse).delete(protect, admin, isCourseOwner, deleteCourse);
+// --- THIS ROUTE HAS BEEN MODIFIED ---
+router.route('/:id')
+    .get(optionalAuth, getCourseById) // Added optionalAuth here
+    .put(protect, admin, isCourseOwner, updateCourse)
+    .delete(protect, admin, isCourseOwner, deleteCourse);
+
 router.route('/:id/restore').put(protect, admin, isCourseOwner, restoreCourse);
 router.route('/:id/permanent-delete').delete(protect, admin, isCourseOwner, permanentlyDeleteCourse);
 router.route('/:id/enroll').post(protect, enrollInCourse);
 router.route('/:id/create-checkout-session').post(protect, createCheckoutSession);
-
+router.route('/verify-payment').post(protect, verifyPaymentSession);
 // Routes for user progress
 router.route('/:courseId/progress').put(protect, updateUserProgress);
 router.route('/:courseId/lesson/:lessonId/slide/:slideId/quiz').post(protect, submitQuiz);
