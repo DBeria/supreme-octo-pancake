@@ -1,886 +1,1161 @@
-// client/src/pages/LessonView.jsx
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import axios from "axios";
 import html2canvas from "html2canvas";
 import { saveAs } from "file-saver";
 import {
-  ChevronDown as ChevronDownIcon,
-  ArrowLeft as ArrowLeftIcon,
-  ArrowRight as ArrowRightIcon,
-  CheckCircle as CheckCircleIcon,
-  XCircle as XCircleIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  XCircleIcon,
   Download,
-  Loader2,
   Maximize2,
   Minimize2,
+  RotateCw,
+  Eye,
 } from "lucide-react";
 
-// -------------------- helpers --------------------
-const keyLS = (courseId, lessonId) => `progress:${courseId}:${lessonId}`;
-const clamp = (n, min, max) => Math.max(min, Math.min(n, max));
+/* -------------------- CONSTANTS & HELPERS -------------------- */
+const BASE = { W: 960, H: 540 };       // storage design base
+const CANVAS = { W: 1280, H: 720 };    // editor/viewer canvas design
+const SX = CANVAS.W / BASE.W;
+const SY = CANVAS.H / BASE.H;
 
-const parseYouTubeId = (url) => {
+const genId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+const clamp = (i, len) => (len <= 0 ? 0 : Math.max(0, Math.min(i, len - 1)));
+
+const positionKey = (courseId) => `courseProgress:${courseId}`;
+const completedKey = (courseId) => `courseCompletedSlides:${courseId}`;
+const certShownKey = (courseId) => `courseCertificateShown:${courseId}`;
+const certSavedKey = (courseId) => `courseCertificateSaved:${courseId}`;
+
+function savePosition(courseId, lessonId, slideIdx) {
+  try { localStorage.setItem(positionKey(courseId), JSON.stringify({ lessonId, slideIdx })); } catch {}
+}
+function loadPosition(courseId) {
+  try {
+    const raw = localStorage.getItem(positionKey(courseId));
+    if (!raw) return null;
+    const j = JSON.parse(raw);
+    if (typeof j?.slideIdx !== "number" || !j?.lessonId) return null;
+    return j;
+  } catch { return null; }
+}
+function saveCompleted(courseId, set) {
+  try { localStorage.setItem(completedKey(courseId), JSON.stringify([...set])); } catch {}
+}
+function loadCompleted(courseId) {
+  try {
+    const raw = localStorage.getItem(completedKey(courseId));
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw));
+  } catch { return new Set(); }
+}
+function setCertShown(courseId) {
+  try { localStorage.setItem(certShownKey(courseId), "1"); } catch {}
+}
+function getCertShown(courseId) {
+  try { return localStorage.getItem(certShownKey(courseId)) === "1"; } catch { return false; }
+}
+function setCertSaved(courseId) {
+  try { localStorage.setItem(certSavedKey(courseId), "1"); } catch {}
+}
+function getCertSaved(courseId) {
+  try { return localStorage.getItem(certSavedKey(courseId)) === "1"; } catch { return false; }
+}
+
+function normalizeQuiz(q) {
+  if (!q) return null;
+  const out = { ...q };
+  out.answers = Array.isArray(out.answers)
+    ? out.answers.map((a) => ({ _id: a?._id || genId(), text: a?.text ?? "", isCorrect: !!a?.isCorrect }))
+    : [];
+  if (Array.isArray(out.prompts)) {
+    out.prompts = out.prompts.map((p) => ({ _id: p?._id || genId(), prompt: p?.prompt ?? "", correctAnswer: p?.correctAnswer ?? "" }));
+  } else if (Array.isArray(out.matchPrompts)) {
+    out.prompts = out.matchPrompts.map((p) => ({ _id: p?._id || genId(), prompt: p?.prompt ?? "", correctAnswer: p?.correctMatch ?? "" }));
+  } else out.prompts = [];
+  out.matchOptions = Array.isArray(out.matchOptions) ? out.matchOptions : [];
+  out.type = out.type || (out.answers.length ? "single-choice" : "matching");
+  out.question = out.question || "Quiz";
+  out.explanation = out.explanation || "";
+  return out;
+}
+function normalizeCourse(raw) {
+  const c = JSON.parse(JSON.stringify(raw || {}));
+  c.title = c.title ?? "Untitled";
+  c.lessons = Array.isArray(c.lessons) ? c.lessons : [];
+  c.lessons.forEach((lesson) => {
+    lesson.title = lesson.title ?? "Lesson";
+    lesson.slides = Array.isArray(lesson.slides) ? lesson.slides : [];
+    lesson.slides.forEach((s) => {
+      s.title = s.title ?? "";
+      s.backgroundColor = typeof s.backgroundColor === "string" ? s.backgroundColor : "#FFFFFF";
+      s.elements = Array.isArray(s.elements) ? s.elements : [];
+      if (s.quiz) s.quiz = normalizeQuiz(s.quiz);
+    });
+  });
+  return c;
+}
+function buildFlatMap(course) {
+  const flat = [];
+  (course?.lessons || []).forEach((lesson, li) => {
+    (lesson?.slides || []).forEach((_, si) => { flat.push({ lessonIdx: li, slideIdx: si }); });
+  });
+  return flat;
+}
+function slideKey(lesson, slide, li, si) {
+  if (lesson?._id && slide?._id) return `${lesson._id}|${slide._id}`;
+  return `${li}|${si}`;
+}
+function parseYouTubeId(url = "") {
   try {
     const u = new URL(url);
     if (u.hostname.includes("youtu.be")) return u.pathname.slice(1);
-    if (u.searchParams.get("v")) return u.searchParams.get("v");
-    const parts = u.pathname.split("/");
-    return parts.includes("embed") ? parts[parts.length - 1] : null;
-  } catch {
-    return null;
-  }
-};
+    if (u.hostname.includes("youtube.com")) {
+      if (u.searchParams.get("v")) return u.searchParams.get("v");
+      const parts = u.pathname.split("/");
+      const idx = parts.findIndex((p) => p === "embed");
+      if (idx !== -1 && parts[idx + 1]) return parts[idx + 1];
+    }
+  } catch {}
+  return null;
+}
 
-// -------------------- component --------------------
-const LessonView = () => {
+/* -------------------- COMPONENT -------------------- */
+export default function LessonView() {
   const { courseId, lessonId } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  // data
   const [course, setCourse] = useState(null);
   const [user, setUser] = useState(null);
-
-  // ui state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [openLessons, setOpenLessons] = useState({});
 
-  // position
-  const [activeLessonIndex, setActiveLessonIndex] = useState(0);
-  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [flatIndex, setFlatIndex] = useState(0);
+  const [completed, setCompleted] = useState(new Set());
 
-  // quiz
+  // quiz state
   const [isQuizModalOpen, setIsQuizModalOpen] = useState(false);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [quizFeedback, setQuizFeedback] = useState("");
   const [showExplanation, setShowExplanation] = useState(false);
   const [isQuizCompleted, setIsQuizCompleted] = useState(false);
-  const [isFinalExamPassed, setIsFinalExamPassed] = useState(false);
+  const [answerStates, setAnswerStates] = useState({});
+  const [matchingStates, setMatchingStates] = useState({});
   const [shuffledAnswers, setShuffledAnswers] = useState([]);
   const [shuffledPrompts, setShuffledPrompts] = useState([]);
 
   // certificate
   const [showCertificateModal, setShowCertificateModal] = useState(false);
+  const [autoSavedCertOnce, setAutoSavedCertOnce] = useState(false);
   const certificateRef = useRef(null);
 
   // fullscreen
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const stageRef = useRef(null);
+  const [overlayVisible, setOverlayVisible] = useState(true);
+  const [fsScale, setFsScale] = useState(1);
+  const fsWrapRef = useRef(null);
+  const fsFrameRef = useRef(null);
+  const fsSlideRef = useRef(null);
+  const overlayTimerRef = useRef(null);
 
-  const activeLesson = course?.lessons?.[activeLessonIndex];
-  const activeSlide = activeLesson?.slides?.[activeSlideIndex];
-  const isFinalExamLesson = Boolean(activeLesson?.isFinalExam);
-  const hasPassedFinalExamBefore =
-    user?.completedCourses?.some((c) => c.courseId === courseId && c.passedFinalExam) || false;
-
-  // -------- initial slide from ?slide= or localStorage --------
-  const initialSlideIndex = useMemo(() => {
-    const url = new URL(window.location.href);
-    const qs = url.searchParams.get("slide");
-    if (qs && !Number.isNaN(Number(qs))) return Math.max(0, Number(qs));
-    try {
-      const raw = localStorage.getItem(keyLS(courseId, lessonId));
-      if (raw) {
-        const { index } = JSON.parse(raw);
-        if (Number.isInteger(index)) return index;
-      }
-    } catch (_) {}
-    return 0;
-  }, [courseId, lessonId]);
-
-  // -------- fetch course + user --------
+  // load course/user
   useEffect(() => {
-    let alive = true;
     (async () => {
       setLoading(true);
-      setError("");
       try {
         const token = localStorage.getItem("token");
-        const config = { headers: { Authorization: `Bearer ${token}` } };
+        const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
 
-        const [courseRes, userRes] = await Promise.all([
-          axios.get(`/api/courses/${courseId}`, config),
-          axios.get(`/api/users/profile`, config),
-        ]);
+        const courseRes = await axios.get(`/api/courses/${courseId}`, config);
+        const normalized = normalizeCourse(courseRes.data);
+        setCourse(normalized);
 
-        if (!alive) return;
+        try {
+          const userRes = await axios.get("/api/users/profile", config);
+          setUser(userRes.data);
+        } catch { setUser(null); }
 
-        const crs = courseRes.data;
-        const usr = userRes.data;
-        setCourse(crs);
-        setUser(usr);
+        setCompleted(loadCompleted(courseId));
 
-        // focus lesson from URL param
-        if (lessonId) {
-          const idx = crs.lessons.findIndex((l) => l._id === lessonId);
-          if (idx !== -1) {
-            setActiveLessonIndex(idx);
-            setOpenLessons((prev) => ({ ...prev, [idx]: true }));
-          }
+        const flat = buildFlatMap(normalized);
+        if (flat.length === 0) {
+          setFlatIndex(0);
+        } else if (lessonId) {
+          const li = normalized.lessons.findIndex((l) => String(l._id) === String(lessonId));
+          const firstIdx = flat.findIndex((p) => p.lessonIdx === li);
+          setFlatIndex(firstIdx >= 0 ? firstIdx : 0);
+        } else {
+          const saved = loadPosition(courseId);
+          if (saved) {
+            const li = normalized.lessons.findIndex((l) => String(l._id) === String(saved.lessonId));
+            if (li !== -1) {
+              const safeSlide = clamp(Number(saved.slideIdx) || 0, normalized.lessons[li].slides.length);
+              const idx = flat.findIndex((p) => p.lessonIdx === li && p.slideIdx === safeSlide);
+              setFlatIndex(idx >= 0 ? idx : 0);
+            } else setFlatIndex(0);
+          } else setFlatIndex(0);
         }
+        setError("");
       } catch (e) {
-        if (alive) setError("Failed to load course or user profile.");
+        console.error(e);
+        setError("Failed to load course or lesson. Please check your enrollment status and try again.");
       } finally {
-        if (alive) setLoading(false);
+        setLoading(false);
       }
     })();
-    return () => {
-      alive = false;
-    };
   }, [courseId, lessonId]);
 
-  // -------- ensure slide index in range on lesson change --------
-  useEffect(() => {
-    if (!activeLesson) return;
-    const max = Math.max(0, (activeLesson.slides?.length || 1) - 1);
-    setActiveSlideIndex((i) => clamp(i ?? initialSlideIndex, 0, max));
-    // reflect URL and LS when lesson changes
-    const url = new URL(window.location.href);
-    url.searchParams.set("slide", String(clamp(activeSlideIndex, 0, max)));
-    window.history.replaceState({}, "", url);
-  }, [activeLesson]); // eslint-disable-line
+  const flat = useMemo(() => buildFlatMap(course), [course]);
+  const pos = useMemo(() => {
+    if (!flat.length) return { lessonIdx: 0, slideIdx: 0 };
+    const i = Math.max(0, Math.min(flatIndex, flat.length - 1));
+    return flat[i];
+  }, [flat, flatIndex]);
 
-  // -------- persist progress & reflect in URL on slide change --------
-  useEffect(() => {
-    if (!course || !activeLesson) return;
-    try {
-      localStorage.setItem(
-        keyLS(courseId, activeLesson._id || lessonId),
-        JSON.stringify({ index: activeSlideIndex })
-      );
-    } catch (_) {}
-    const url = new URL(window.location.href);
-    url.searchParams.set("slide", String(activeSlideIndex));
-    window.history.replaceState({}, "", url);
-  }, [activeSlideIndex, courseId, activeLesson, lessonId, course]);
+  const activeLesson = course?.lessons?.[pos.lessonIdx] || null;
+  const activeSlide  = activeLesson?.slides?.[pos.slideIdx] || null;
+  const totalSlides  = flat.length;
+  const currentQuiz  = activeSlide?.quiz ? normalizeQuiz(activeSlide.quiz) : null;
 
-  // -------- quiz setup on slide change --------
-  useEffect(() => {
-    setSelectedAnswers({});
-    setQuizFeedback("");
-    setShowExplanation(false);
-    setIsQuizCompleted(false);
+  // per-lesson counts (❗️restart numbering)
+  const lessonSlides     = activeLesson?.slides || [];
+  const lessonSlideNo    = (pos.slideIdx ?? 0) + 1;
+  const lessonSlideTotal = lessonSlides.length;
 
-    const q = activeSlide?.quiz;
-    if (!q) {
-      setShuffledAnswers([]);
-      setShuffledPrompts([]);
-      setIsQuizModalOpen(false);
+  // first flat index for current lesson (used for lesson dots)
+  const lessonFirstFlatIndex = useMemo(() => {
+    return flat.findIndex((p) => p.lessonIdx === pos.lessonIdx && p.slideIdx === 0);
+  }, [flat, pos.lessonIdx]);
+
+  // persist position
+  useEffect(() => {
+    if (!course || !activeLesson || !activeSlide) return;
+    savePosition(courseId, activeLesson._id, pos.slideIdx);
+  }, [course, courseId, activeLesson?._id, activeSlide?._id, pos.slideIdx]);
+
+  // quiz shuffle/reset on slide change
+  useEffect(() => {
+    if (!currentQuiz) {
+      setShuffledAnswers([]); setShuffledPrompts([]);
+      setSelectedAnswers({}); setQuizFeedback(""); setShowExplanation(false);
+      setIsQuizCompleted(false); setAnswerStates({}); setMatchingStates({});
       return;
     }
-
-    if (q.type === "single-choice" || q.type === "multiple-choice") {
-      setShuffledAnswers([...(q.answers || [])].sort(() => Math.random() - 0.5));
-    } else if (q.type === "matching") {
-      setShuffledPrompts([...(q.prompts || [])].sort(() => Math.random() - 0.5));
-    } else {
-      setShuffledAnswers([]);
-      setShuffledPrompts([]);
+    if (["single-choice", "multiple-choice"].includes(currentQuiz.type)) {
+      setShuffledAnswers([...(currentQuiz.answers || [])].sort(() => Math.random() - 0.5));
+    } else if (currentQuiz.type === "matching") {
+      setShuffledPrompts([...(currentQuiz.prompts || [])].sort(() => Math.random() - 0.5));
     }
-  }, [activeSlide]);
+    setSelectedAnswers({}); setQuizFeedback(""); setShowExplanation(false);
+    setIsQuizCompleted(false); setAnswerStates({}); setMatchingStates({});
+  }, [currentQuiz?.type, pos.lessonIdx, pos.slideIdx]);
 
-  // -------- keyboard navigation --------
+  // keyboard nav + overlay
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "ArrowRight" || e.key === " ") {
-        e.preventDefault();
-        handleNext();
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        handlePrev();
-      }
+      if (e.key === "ArrowRight") handleNext();
+      else if (e.key === "ArrowLeft") handlePrev();
+      else if (e.key === "Escape" && isFullscreen) exitFullscreen();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, [isFullscreen, flatIndex, totalSlides, completed, currentQuiz]);
 
-  // -------- swipe navigation --------
-  const touchStartX = useRef(null);
-  const onTouchStart = (e) => (touchStartX.current = e.touches[0].clientX);
-  const onTouchEnd = (e) => {
-    if (touchStartX.current == null) return;
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    const threshold = 40;
-    if (dx < -threshold) handleNext();
-    if (dx > threshold) handlePrev();
-    touchStartX.current = null;
-  };
+  const isNextDisabled = !totalSlides || flatIndex >= totalSlides - 1;
+  const isPrevDisabled = !totalSlides || flatIndex <= 0;
 
-  // -------- derived booleans --------
-  const hasSlides = Boolean(activeLesson?.slides?.length);
-  const isFirstSlide = activeLessonIndex === 0 && activeSlideIndex === 0;
-  const isLastSlide =
-    hasSlides &&
-    activeSlideIndex === activeLesson.slides.length - 1 &&
-    activeLessonIndex === (course?.lessons?.length || 1) - 1;
-
-  const blockAdvanceForQuiz = isQuizModalOpen && activeSlide?.quiz && !isQuizCompleted;
-  const blockAdvanceForFinal =
-    isFinalExamLesson && !(isFinalExamPassed || hasPassedFinalExamBefore);
-
-  const isNextDisabled = !activeLesson
-    ? true
-    : blockAdvanceForQuiz || blockAdvanceForFinal || isLastSlide;
-
-  // -------- navigation helpers --------
-  const handleSlideSelect = useCallback(
-    (lessonIdx, slideIdx) => {
-      if (!course) return;
-      setActiveLessonIndex(lessonIdx);
-      setActiveSlideIndex(slideIdx);
-      navigate(`/lesson/${courseId}/${course.lessons[lessonIdx]._id}?slide=${slideIdx}`, {
-        replace: true,
-      });
-      setIsQuizModalOpen(false);
-    },
-    [navigate, courseId, course]
+  const slideCompletedKey = useCallback(
+    () => slideKey(activeLesson, activeSlide, pos.lessonIdx, pos.slideIdx),
+    [activeLesson, activeSlide, pos.lessonIdx, pos.slideIdx]
   );
 
-  const handleNext = useCallback(() => {
-    if (!activeLesson || isNextDisabled) return;
-    // within lesson
-    if (activeSlideIndex < (activeLesson.slides?.length || 1) - 1) {
-      handleSlideSelect(activeLessonIndex, activeSlideIndex + 1);
-      return;
-    }
-    // next lesson
-    if (activeLessonIndex < (course?.lessons?.length || 1) - 1) {
-      handleSlideSelect(activeLessonIndex + 1, 0);
-    }
-  }, [
-    activeLesson,
-    isNextDisabled,
-    activeSlideIndex,
-    activeLessonIndex,
-    course,
-    handleSlideSelect,
-  ]);
+  const checkAllComplete = useCallback(
+    (setArg = completed) => {
+      if (!course) return false;
+      const keys = new Set();
+      course.lessons?.forEach((l, li) => l.slides?.forEach((s, si) => keys.add(slideKey(l, s, li, si))));
+      let done = 0; keys.forEach((k) => { if (setArg.has(k)) done += 1; });
+      return done >= keys.size && keys.size > 0;
+    },
+    [course, completed]
+  );
 
-  const handlePrev = useCallback(() => {
-    if (!activeLesson) return;
-    if (activeSlideIndex > 0) {
-      handleSlideSelect(activeLessonIndex, activeSlideIndex - 1);
-      return;
-    }
-    if (activeLessonIndex > 0) {
-      const prev = course.lessons[activeLessonIndex - 1];
-      handleSlideSelect(activeLessonIndex - 1, Math.max(0, (prev.slides?.length || 1) - 1));
-    }
-  }, [activeLesson, activeSlideIndex, activeLessonIndex, course, handleSlideSelect]);
+  const markCompletedCurrentSlide = useCallback(async () => {
+    if (!course || !activeLesson || !activeSlide) return;
+    const key = slideCompletedKey();
+    if (completed.has(key)) return;
 
-  const toggleLessonAccordion = (lessonIdx) =>
-    setOpenLessons((p) => ({ ...p, [lessonIdx]: !p[lessonIdx] }));
-
-  // -------- quiz handlers --------
-  const handleSingleChoiceSelect = (answerId) => {
-    if (!isQuizCompleted) setSelectedAnswers({ id: answerId });
-  };
-  const handleMultiChoiceSelect = (answerId) => {
-    if (!isQuizCompleted) {
-      setSelectedAnswers((prev) => ({ ...prev, [answerId]: !prev[answerId] }));
-    }
-  };
-  const handleMatchingSelect = (promptId, answer) => {
-    if (!isQuizCompleted) {
-      setSelectedAnswers((prev) => ({ ...prev, [promptId]: answer }));
-    }
-  };
-
-  const evaluateQuiz = (quiz) => {
-    if (!quiz) return false;
-    switch (quiz.type) {
-      case "single-choice": {
-        const correct = quiz.answers?.find((a) => a.isCorrect)?._id;
-        return selectedAnswers.id === correct;
-      }
-      case "multiple-choice": {
-        const correctIds = new Set((quiz.answers || []).filter((a) => a.isCorrect).map((a) => a._id));
-        const chosen = new Set(
-          Object.keys(selectedAnswers).filter((k) => selectedAnswers[k])
-        );
-        if (correctIds.size !== chosen.size) return false;
-        for (const id of correctIds) if (!chosen.has(id)) return false;
-        return true;
-      }
-      case "matching": {
-        return (quiz.prompts || []).every(
-          (p) => selectedAnswers[p._id] === p.correctAnswer
-        );
-      }
-      default:
-        return false;
-    }
-  };
-
-  const handleQuizSubmit = async () => {
-    if (!activeSlide?.quiz) return;
-    const correct = evaluateQuiz(activeSlide.quiz);
-    setQuizFeedback(correct ? "Correct! Well done." : "Incorrect. Please review the material.");
-    setIsQuizCompleted(true);
-    setShowExplanation(!correct);
-
-    if (correct) {
-      try {
-        const token = localStorage.getItem("token");
-        await axios.post(
-          `/api/courses/${courseId}/complete-slide`,
-          { lessonId: activeLesson._id, slideId: activeSlide._id },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-      } catch (err) {
-        // no-op (don’t block UX)
-        console.error("Failed to record slide completion:", err);
-      }
-    }
-  };
-
-  const handleFinalExamSubmit = async () => {
-    if (!activeSlide?.quiz) return;
-    const isPassed = evaluateQuiz(activeSlide.quiz);
+    const newSet = new Set(completed);
+    newSet.add(key);
+    setCompleted(newSet);
+    saveCompleted(courseId, newSet);
 
     try {
       const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
       await axios.post(
-        `/api/courses/${courseId}/complete-final-exam`,
-        {
-          lessonId: activeLesson._id,
-          isPassed,
-          userAnswers: selectedAnswers,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
+        `/api/courses/${courseId}/complete-slide`,
+        { lessonId: activeLesson._id, slideId: activeSlide._id },
+        { headers }
       );
-
-      setQuizFeedback(
-        isPassed
-          ? "Congratulations! You passed the final exam!"
-          : "You did not pass the final exam. Please review the material and try again."
-      );
-      setIsQuizCompleted(true);
-
-      if (isPassed) {
-        setIsFinalExamPassed(true);
-        setShowCertificateModal(true);
-      }
-    } catch (err) {
-      console.error("Final exam submission failed:", err);
-      setQuizFeedback("An error occurred during submission. Please try again.");
-      setIsQuizCompleted(true);
+    } catch (e) {
+      console.warn("complete-slide failed (non-fatal):", e?.response?.data || e?.message);
     }
-  };
 
-  const handleCloseQuizModal = () => {
-    setIsQuizModalOpen(false);
-    setQuizFeedback("");
-    setShowExplanation(false);
-    setIsQuizCompleted(false);
-    setSelectedAnswers({});
-  };
-
-  // -------- certificate --------
-  const closeCertificateModal = () => setShowCertificateModal(false);
-
-  const generateAndSaveCertificate = async () => {
-    if (!certificateRef.current || !course || !user) return;
-    const canvas = await html2canvas(certificateRef.current, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: "#ffffff",
-    });
-    canvas.toBlob((blob) => {
-      const safeTitle = course.title?.replace(/\s+/g, "-") || "course";
-      const idPart = user?.idNumber || user?._id || "user";
-      saveAs(blob, `certificate-${safeTitle}-${idPart}.png`);
-    });
-  };
-
-  // -------- video renderer --------
-  const getVideoElement = (element) => {
-    const c = element?.content || "";
-    const yt = parseYouTubeId(c);
-    if (yt) {
-      return (
-        <iframe
-          src={`https://www.youtube.com/embed/${yt}`}
-          frameBorder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          title="YouTube video player"
-          className="w-full h-full object-cover"
-        />
-      );
+    if (checkAllComplete(newSet) && !getCertShown(courseId)) {
+      setShowCertificateModal(true);
+      setCertShown(courseId);
+      try {
+        const token = localStorage.getItem("token");
+        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+        await axios.post(`/api/courses/${courseId}/complete-course`, { completed: true }, { headers });
+      } catch {}
     }
-    if (c.includes("vimeo.com")) {
-      const id = (() => {
-        try {
-          const u = new URL(c);
-          return u.pathname.split("/").pop();
-        } catch {
-          return c.split("/").pop();
-        }
-      })();
-      return (
-        <iframe
-          src={`https://player.vimeo.com/video/${id}`}
-          frameBorder="0"
-          allow="fullscreen; picture-in-picture"
-          allowFullScreen
-          title="Vimeo video player"
-          className="w-full h-full object-cover"
-        />
-      );
-    }
-    return <video src={c} controls className="w-full h-full object-cover" />;
-  };
+  }, [course, activeLesson, activeSlide, completed, courseId, slideCompletedKey, checkAllComplete]);
 
-  // -------- fullscreen --------
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      stageRef.current?.requestFullscreen?.();
-      setIsFullscreen(true);
+  const handleNext = useCallback(() => {
+    if (!totalSlides) return;
+    if (currentQuiz) {
+      const key = slideCompletedKey();
+      if (!completed.has(key)) { setIsQuizModalOpen(true); return; }
     } else {
-      document.exitFullscreen?.();
-      setIsFullscreen(false);
+      markCompletedCurrentSlide();
     }
+    setIsQuizModalOpen(false);
+    setFlatIndex((i) => Math.max(0, Math.min(i + 1, totalSlides - 1)));
+  }, [totalSlides, currentQuiz, completed, slideCompletedKey, markCompletedCurrentSlide]);
+
+  const handlePrev = useCallback(() => {
+    if (!totalSlides) return;
+    setIsQuizModalOpen(false);
+    setFlatIndex((i) => Math.max(0, Math.min(i - 1, totalSlides - 1)));
+  }, [totalSlides]);
+
+  const handleSlideSelect = (lessonIdx, slideIdx) => {
+    if (!course) return;
+    const idx = flat.findIndex((p) => p.lessonIdx === lessonIdx && p.slideIdx === slideIdx);
+    setIsQuizModalOpen(false);
+    setFlatIndex(idx >= 0 ? idx : 0);
+    const l = course.lessons?.[lessonIdx];
+    if (l?._id != null) savePosition(courseId, l._id, slideIdx);
   };
 
-  // -------- ui --------
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900 text-slate-200">
-        <Loader2 className="h-7 w-7 animate-spin mr-2" />
-        Loading Lesson...
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900">
-        <div className="rounded-xl border border-red-800 bg-red-900/40 px-6 py-4 text-red-100">
-          {error}
+  // quiz interactions
+  const onSingleChange = (id) => {
+    if (isQuizCompleted) return;
+    setSelectedAnswers({ id });
+  };
+  const onMultiChange = (id) => {
+    if (isQuizCompleted) return;
+    setSelectedAnswers((p) => ({ ...p, [id]: !p[id] }));
+  };
+  const handleMatch = (pid, ans) => {
+    if (isQuizCompleted) return;
+    setSelectedAnswers((p) => ({ ...p, [pid]: ans }));
+  };
+
+  const evaluateQuiz = () => {
+    if (!currentQuiz) return { correct: false, answerStates: {}, matchingStates: {} };
+    if (currentQuiz.type === "single-choice") {
+      const correctId = currentQuiz.answers.find((a) => a.isCorrect)?._id;
+      const selectedId = selectedAnswers.id;
+      const correct = selectedId === correctId;
+      const map = {};
+      currentQuiz.answers.forEach((a) => {
+        if (a._id === correctId && selectedId === correctId) map[a._id] = "correct";
+        else if (a._id === selectedId && selectedId !== correctId) map[a._id] = "wrong-selected";
+        else if (a._id === correctId && selectedId !== correctId) map[a._id] = "missed-correct";
+        else map[a._id] = "neutral";
+      });
+      return { correct, answerStates: map, matchingStates: {} };
+    }
+    if (currentQuiz.type === "multiple-choice") {
+      const correctIds = new Set(currentQuiz.answers.filter((a) => a.isCorrect).map((a) => a._id));
+      const selectedIds = new Set(Object.keys(selectedAnswers).filter((k) => selectedAnswers[k]));
+      const correct = correctIds.size === selectedIds.size && [...correctIds].every((id) => selectedIds.has(id));
+      const map = {};
+      currentQuiz.answers.forEach((a) => {
+        const isSel = selectedIds.has(a._id);
+        if (a.isCorrect && isSel) map[a._id] = "correct";
+        else if (!a.isCorrect && isSel) map[a._id] = "wrong-selected";
+        else if (a.isCorrect && !isSel) map[a._id] = "missed-correct";
+        else map[a._id] = "neutral";
+      });
+      return { correct, answerStates: map, matchingStates: {} };
+    }
+    if (currentQuiz.type === "matching") {
+      const states = {};
+      let allCorrect = true;
+      currentQuiz.prompts.forEach((p) => {
+        const ok = selectedAnswers[p._id] === p.correctAnswer;
+        states[p._id] = !!ok;
+        if (!ok) allCorrect = false;
+      });
+      return { correct: allCorrect, answerStates: {}, matchingStates: states };
+    }
+    return { correct: false, answerStates: {}, matchingStates: {} };
+  };
+
+  const submitQuiz = async () => {
+    if (!currentQuiz) return;
+    const { correct, answerStates: aStates, matchingStates: mStates } = evaluateQuiz();
+    setAnswerStates(aStates);
+    setMatchingStates(mStates);
+    setQuizFeedback(correct ? "Correct! Great job 🎉" : "Not quite. Review and try again.");
+    setIsQuizCompleted(true);
+    setShowExplanation(!correct);
+    if (correct) { await markCompletedCurrentSlide(); }
+  };
+
+  // CERTIFICATE SAVE
+  const userIdDisplay = user?.idNumber || user?.studentId || user?._id || user?.email || "—";
+  const saveCertificateToDashboard = useCallback(
+    async (canvas) => {
+      try {
+        const dataUrl = canvas.toDataURL("image/png");
+        try {
+          const token = localStorage.getItem("token");
+          const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+          await axios.post(
+            "/api/certificates",
+            {
+              courseId,
+              courseTitle: course?.title,
+              issuedAt: new Date().toISOString(),
+              userId: user?._id,
+              userName: user?.name,
+              idNumber: userIdDisplay,
+              imageBase64: dataUrl,
+            },
+            { headers }
+          );
+          setCertSaved(courseId);
+          return true;
+        } catch {
+          const key = `certificates:${user?._id || "me"}`;
+          let list = [];
+          try { list = JSON.parse(localStorage.getItem(key)) || []; } catch {}
+          list.push({
+            id: `${courseId}:${Date.now()}`,
+            courseId,
+            courseTitle: course?.title,
+            issuedAt: new Date().toISOString(),
+            idNumber: userIdDisplay,
+            imageBase64: dataUrl,
+          });
+          localStorage.setItem(key, JSON.stringify(list));
+          setCertSaved(courseId);
+          return true;
+        }
+      } catch {
+        return false;
+      }
+    },
+    [courseId, course?.title, user?._id, user?.name, userIdDisplay]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const go = async () => {
+      if (!showCertificateModal || autoSavedCertOnce || getCertSaved(courseId)) return;
+      if (!certificateRef.current) return;
+      await new Promise((r) => setTimeout(r, 150));
+      const canvas = await html2canvas(certificateRef.current, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#ffffff" });
+      if (cancelled) return;
+      const ok = await saveCertificateToDashboard(canvas);
+      if (ok) setAutoSavedCertOnce(true);
+    };
+    go();
+    return () => { cancelled = true; };
+  }, [showCertificateModal, autoSavedCertOnce, courseId, saveCertificateToDashboard]);
+
+  /* -------------------- FULLSCREEN LAYOUT -------------------- */
+  const showOverlayNow = useCallback(() => {
+    setOverlayVisible(true);
+    if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+    overlayTimerRef.current = setTimeout(() => setOverlayVisible(false), 2500);
+  }, []);
+  const enterFullscreen = () => { setIsFullscreen(true); setOverlayVisible(true); setTimeout(recalcFsScale, 0); };
+  const exitFullscreen  = () => { setIsFullscreen(false); setOverlayVisible(true); };
+
+  const recalcFsScale = useCallback(() => {
+    if (!fsWrapRef.current || !fsFrameRef.current || !fsSlideRef.current) return;
+    const wrap = fsWrapRef.current.getBoundingClientRect();
+    const P = 40; // padding around frame
+    const availW = Math.max(200, wrap.width - P * 2);
+    const availH = Math.max(200, wrap.height - P * 2 - 100); // room for dock
+    const scale = Math.min(availW / CANVAS.W, availH / CANVAS.H);
+    setFsScale(scale > 0 ? scale : 1);
+  }, []);
+  useEffect(() => {
+    if (!isFullscreen) return;
+    recalcFsScale();
+    const onResize = () => recalcFsScale();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [isFullscreen, recalcFsScale]);
+
+  // overlay mouse move
+  useEffect(() => {
+    if (!isFullscreen) return;
+    showOverlayNow();
+  }, [isFullscreen, showOverlayNow]);
+
+  /* -------------------- RENDER HELPERS -------------------- */
+  const renderElement = (el, i) => {
+    const isText = el.type === "text";
+    const style = {
+      position: "absolute",
+      left: (el.position?.x ?? 0) * SX,
+      top: (el.position?.y ?? 0) * SY,
+      width: (el.size?.width ?? 0) * SX,
+      height: isText ? "auto" : (el.size?.height ?? 0) * SY,
+      zIndex: el.zIndex || 1,
+      transform: `rotate(${el.rotation || 0}deg)`,
+      overflow: "hidden",
+    };
+    if (isText) {
+      const s = {
+        fontSize: `${(el.fontSize || 16) * SY}px`,
+        color: el.color || "#0f172a",
+        fontWeight: el.isBold ? "bold" : "600",
+        fontStyle: el.isItalic ? "italic" : "normal",
+        width: "100%",
+        height: "100%",
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+      };
+      return (
+        <div key={i} style={style}>
+          <div dangerouslySetInnerHTML={{ __html: el.content || "" }} style={s} />
         </div>
-      </div>
-    );
-  }
-  if (!course) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900 text-white">
-        Course data not found.
-      </div>
-    );
-  }
-  if (!activeLesson) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900 text-white">
-        This course has no lessons.
-      </div>
-    );
-  }
+      );
+    }
+    if (el.type === "image") {
+      return (
+        <div key={i} style={style} className="rounded-lg">
+          {el.content ? (
+            <img src={el.content} alt="" className="w-full h-full object-cover rounded-lg shadow" />
+          ) : null}
+        </div>
+      );
+    }
+    if (el.type === "video") {
+      const url = el.content || "";
+      const yt = parseYouTubeId(url);
+      const isVimeo = /vimeo\.com/.test(url);
+      return (
+        <div key={i} style={style} className="rounded-lg overflow-hidden">
+          {yt ? (
+            <iframe
+              src={`https://www.youtube.com/embed/${yt}`}
+              title="YouTube"
+              className="w-full h-full object-cover"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          ) : isVimeo ? (
+            <iframe
+              src={`https://player.vimeo.com/video/${url.split("/").pop()}`}
+              title="Vimeo"
+              className="w-full h-full object-cover"
+              frameBorder="0"
+              allow="fullscreen; picture-in-picture"
+              allowFullScreen
+            />
+          ) : url ? (
+            <video src={url} controls className="w-full h-full object-cover" />
+          ) : null}
+        </div>
+      );
+    }
+    return null;
+  };
 
-  const progressPct = hasSlides
-    ? Math.round(((activeSlideIndex + 1) / activeLesson.slides.length) * 100)
-    : 0;
+  /* -------------------- UI STATES -------------------- */
+  if (loading) return <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900 text-white">Loading lesson…</div>;
+  if (error)   return <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900 text-red-500">{error}</div>;
+  if (!course) return <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900 text-white">Course not found.</div>;
 
+  const hasAnySlides = lessonSlideTotal > 0; // per-lesson for empty states
+  const progressPct = totalSlides ? Math.round(((flatIndex + 1) / totalSlides) * 100) : 0;
+  const currentKey = slideKey(activeLesson, activeSlide, pos.lessonIdx, pos.slideIdx);
+  const currentCompleted = completed.has(currentKey);
+  const allDone = checkAllComplete();
+
+  /* -------------------- MAIN RENDER -------------------- */
   return (
-    <div className="bg-slate-100 dark:bg-slate-900 min-h-screen">
-      {/* header */}
-      <div className="sticky top-0 z-30 border-b border-slate-200/40 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
-            title="Back"
-          >
-            <ArrowLeftIcon className="inline-block mr-1 h-5 w-5" />
-            Back
-          </button>
-          <div className="min-w-0">
-            <p className="text-blue-600 dark:text-blue-400 font-semibold truncate">{course.title}</p>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white truncate">
-              {activeLesson.title}
-            </h1>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <span className="hidden sm:inline text-sm text-slate-600 dark:text-slate-300">
-              Slide {hasSlides ? activeSlideIndex + 1 : 0}/{activeLesson.slides?.length || 0}
-            </span>
-            <button
-              onClick={toggleFullscreen}
-              className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800"
-              title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            >
-              {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-            </button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-900 dark:via-slate-950 dark:to-black">
+      {/* Header */}
+      <div className="container mx-auto px-4 py-8">
+        <div className="mb-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 backdrop-blur shadow-lg p-6">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">{course.title}</h1>
+              <p className="text-slate-600 dark:text-slate-400 mt-1">{course.lessons?.[pos.lessonIdx]?.title || "Lesson"}</p>
+            </div>
+            <div className="w-full sm:w-96">
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+                <span>Progress</span><span>{progressPct}%</span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                <div className="h-2 bg-gradient-to-r from-blue-500 to-emerald-500 transition-all" style={{ width: `${progressPct}%` }} />
+              </div>
+              {allDone && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => { setShowCertificateModal(true); setCertShown(courseId); }}
+                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow"
+                  >
+                    View Certificate
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        <div className="h-1 w-full bg-slate-200 dark:bg-slate-800">
-          <div className="h-full bg-blue-600 transition-all" style={{ width: `${progressPct}%` }} />
-        </div>
-      </div>
 
-      {/* body */}
-      <div className="container mx-auto px-4 py-6 lg:py-10">
         <div className="flex flex-col lg:flex-row gap-8">
-          {/* stage */}
-          <div className="w-full lg:flex-grow order-1 lg:order-1">
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700">
-              <div className="p-2 md:p-4">
-                {activeSlide ? (
+          {/* Main viewer */}
+          <div className="w-full lg:flex-grow">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 backdrop-blur shadow-xl overflow-hidden">
+              <div className="p-3 md:p-5">
+                {hasAnySlides ? (
                   <>
-                    <div
-                      ref={stageRef}
-                      className="relative w-full aspect-video bg-slate-200 dark:bg-slate-900 rounded-xl overflow-hidden shadow-inner select-none"
-                      style={{ backgroundColor: activeSlide?.backgroundColor || undefined }}
-                      onTouchStart={onTouchStart}
-                      onTouchEnd={onTouchEnd}
-                    >
-                      {(activeSlide?.elements || []).map((el, idx) => {
-                        const isText = el.type === "text";
-                        const style = {
-                          position: "absolute",
-                          left: `${((el.position?.x || 0) / 960) * 100}%`,
-                          top: `${((el.position?.y || 0) / 540) * 100}%`,
-                          width: `${((el.size?.width || 0) / 960) * 100}%`,
-                          height: isText ? "auto" : `${((el.size?.height || 0) / 540) * 100}%`,
-                          zIndex: el.zIndex || 1,
-                          transform: `rotate(${el.rotation || 0}deg)`,
-                        };
-                        const textStyles = isText
-                          ? {
-                              color: el.color || "inherit",
-                              fontWeight: el.isBold ? "bold" : "normal",
-                              fontStyle: el.isItalic ? "italic" : "normal",
-                              width: "100%",
-                              whiteSpace: "pre-wrap",
-                              wordBreak: "break-word",
-                            }
-                          : {};
-
-                        return (
-                          <div key={idx} style={style}>
-                            {el.type === "text" && (
-                              <div
-                                dangerouslySetInnerHTML={{ __html: el.content || "" }}
-                                style={textStyles}
-                                className="text-xs md:text-sm lg:text-base"
-                              />
-                            )}
-                            {el.type === "image" && (
-                              <img
-                                src={el.content}
-                                alt=""
-                                className="w-full h-full object-cover"
-                                draggable={false}
-                              />
-                            )}
-                            {el.type === "video" && getVideoElement(el)}
-                          </div>
-                        );
-                      })}
+                    <div className="w-full flex justify-center">
+                      {/* Outer frame OUTSIDE the slide */}
+                      <div className="relative p-3 rounded-2xl">
+                        <div className="pointer-events-none absolute -inset-2 rounded-2xl bg-transparent"
+                             style={{ boxShadow: "0 0 0 2px rgba(59,130,246,0.8), 0 10px 30px rgba(0,0,0,0.25), 0 0 50px rgba(59,130,246,0.2)" }} />
+                        {/* Slide */}
+                        <div
+                          className="relative rounded-xl overflow-hidden shadow-inner bg-slate-100 dark:bg-slate-950"
+                          style={{
+                            width: `${CANVAS.W}px`,
+                            height: `${CANVAS.H}px`,
+                            backgroundColor: activeSlide?.backgroundColor || "#FFFFFF",
+                          }}
+                        >
+                          {(activeSlide?.elements || []).map((el, i) => renderElement(el, i))}
+                        </div>
+                      </div>
                     </div>
 
-                    {/* quiz entry */}
-                    {activeSlide?.quiz && !isQuizModalOpen && (
-                      <div className="mt-4 text-center">
+                    {/* Dots (per-lesson) */}
+                    <div className="mt-4 flex flex-wrap gap-1.5 justify-center">
+                      {Array.from({ length: lessonSlideTotal }).map((_, i) => (
                         <button
-                          onClick={() => setIsQuizModalOpen(true)}
-                          className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-purple-700 transition shadow-lg"
-                        >
-                          Start Quiz
-                        </button>
+                          key={i}
+                          onClick={() => {
+                            const idx = (lessonFirstFlatIndex >= 0 ? lessonFirstFlatIndex : 0) + i;
+                            setFlatIndex(idx);
+                          }}
+                          className={`h-2.5 rounded-full transition-all ${
+                            i === pos.slideIdx ? "w-8 bg-blue-600" : "w-2.5 bg-slate-300 hover:bg-slate-400 dark:bg-slate-700 dark:hover:bg-slate-600"
+                          }`}
+                          aria-label={`Go to slide ${i + 1}`}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Quiz button (normal mode) */}
+                    {currentQuiz && !isQuizModalOpen && (
+                      <div className="mt-5 flex justify-center">
+                        {!currentCompleted ? (
+                          <button
+                            onClick={() => setIsQuizModalOpen(true)}
+                            className="group relative overflow-hidden bg-gradient-to-r from-purple-600 to-violet-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition"
+                          >
+                            <span className="relative z-10">Start Quiz</span>
+                            <span className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition"></span>
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <span className="text-emerald-600 font-medium">✔ Quiz completed</span>
+                            <button
+                              onClick={() => {
+                                // Review = show answers (without changing completion)
+                                if (["single-choice", "multiple-choice"].includes(currentQuiz.type)) {
+                                  const aStates = {};
+                                  currentQuiz.answers.forEach((a) => (aStates[a._id] = a.isCorrect ? "correct" : "neutral"));
+                                  setAnswerStates(aStates);
+                                } else if (currentQuiz.type === "matching") {
+                                  const mStates = {};
+                                  currentQuiz.prompts.forEach((p) => (mStates[p._id] = true));
+                                  setMatchingStates(mStates);
+                                }
+                                setIsQuizModalOpen(true);
+                                setIsQuizCompleted(true);
+                              }}
+                              className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-black"
+                            >
+                              Review Quiz
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedAnswers({});
+                                setAnswerStates({});
+                                setMatchingStates({});
+                                setQuizFeedback("");
+                                setShowExplanation(false);
+                                setIsQuizCompleted(false);
+                                setIsQuizModalOpen(true);
+                              }}
+                              className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white"
+                            >
+                              Retake
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
                 ) : (
-                  <div className="flex items-center justify-center h-full aspect-video bg-slate-200 dark:bg-slate-900 rounded-lg">
-                    <p className="text-gray-500">This slide is empty.</p>
+                  <div className="flex items-center justify-center h-full rounded-xl bg-slate-100 dark:bg-slate-950" style={{ height: `${CANVAS.H}px` }}>
+                    <p className="text-slate-500">This course has no slides.</p>
                   </div>
                 )}
               </div>
 
-              {/* bottom controls */}
-              <div className="flex justify-between items-center p-4 border-t border-slate-200 dark:border-slate-700">
+              {/* Footer bar (Fullscreen button moved here) */}
+              <div className="flex items-center justify-between gap-3 p-4 border-t border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60">
                 <button
                   onClick={handlePrev}
-                  disabled={isFirstSlide}
-                  className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-5 py-2.5 rounded-lg font-semibold hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50 transition shadow-sm flex items-center gap-2"
+                  disabled={isPrevDisabled}
+                  className="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-slate-700 disabled:opacity-50 shadow-sm flex items-center gap-2"
                 >
-                  <ArrowLeftIcon className="h-5 w-5" /> Previous
+                  <ArrowLeftIcon /> Previous
                 </button>
-                <span className="text-gray-600 dark:text-gray-400 font-medium">
-                  Slide {activeSlideIndex + 1} / {activeLesson?.slides?.length || 0}
-                </span>
-                <button
-                  onClick={handleNext}
-                  disabled={isNextDisabled}
-                  className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 transition shadow-sm flex items-center gap-2"
-                  title={
-                    blockAdvanceForQuiz
-                      ? "Finish the quiz first"
-                      : blockAdvanceForFinal
-                      ? "Pass the final exam to continue"
-                      : undefined
-                  }
-                >
-                  Next <ArrowRightIcon className="h-5 w-5" />
-                </button>
+
+                {/* ❗️Per-lesson counter */}
+                <div className="text-slate-600 dark:text-slate-400 font-medium">
+                  {hasAnySlides ? <>Slide {lessonSlideNo} / {lessonSlideTotal}</> : <>No Slides</>}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Fullscreen button here */}
+                  <button
+                    onClick={enterFullscreen}
+                    className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 bg-slate-900 text-white hover:bg-black shadow"
+                    title="Fullscreen"
+                  >
+                    <Maximize2 size={18} /> Fullscreen
+                  </button>
+
+                  {flatIndex < totalSlides - 1 ? (
+                    <button
+                      onClick={handleNext}
+                      className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center gap-2"
+                    >
+                      Next <ArrowRightIcon />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        if (currentQuiz && !currentCompleted) { setIsQuizModalOpen(true); return; }
+                        await markCompletedCurrentSlide();
+                        if (checkAllComplete() && !getCertShown(courseId)) {
+                          setShowCertificateModal(true);
+                          setCertShown(courseId);
+                        }
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    >
+                      {allDone ? "View Certificate" : "Finish Course"}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* sidebar */}
-          <div className="w-full lg:w-96 flex-shrink-0 order-2 lg:order-2">
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 sticky top-24 max-h-[75vh] overflow-y-auto">
-              <h3 className="font-bold mb-4 text-gray-900 dark:text-white text-xl">Course Content</h3>
-              <div className="space-y-2 pr-1">
-                {(course.lessons || []).map((lesson, lessonIdx) => (
-                  <div
-                    key={lesson._id}
-                    className="border-b border-slate-200 dark:border-slate-700 last:border-b-0"
-                  >
-                    <button
-                      onClick={() => toggleLessonAccordion(lessonIdx)}
-                      className="w-full flex justify-between items-center p-3 text-left font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md"
-                    >
-                      <span className="truncate">{lesson.title}</span>
-                      <ChevronDownIcon
-                        className={`w-5 h-5 transition-transform ${
-                          openLessons[lessonIdx] ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-                    {openLessons[lessonIdx] && (
-                      <div className="pl-4 pb-2">
-                        {(lesson.slides || []).map((slide, slideIdx) => {
-                          const isActive =
-                            activeLessonIndex === lessonIdx && activeSlideIndex === slideIdx;
-                          const label =
-                            slide.title ||
-                            (slide.quiz
-                              ? `Quiz: ${String(slide.quiz.question || "")
-                                  .slice(0, 24)
-                                  .trim()}…`
-                              : `Slide ${slideIdx + 1}`);
+          {/* Sidebar */}
+          <div className="w-full lg:w-96 flex-shrink-0">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 backdrop-blur shadow-xl p-4 sticky top-24">
+              <h3 className="font-bold mb-4 text-slate-900 dark:text-white text-xl">Course Content</h3>
+              <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-1">
+                {(course.lessons || []).map((lesson, lessonIdx) => {
+                  const slides = lesson?.slides || [];
+                  return (
+                    <div key={lesson._id || lessonIdx} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/50">
+                      <div className="flex items-center justify-between px-3 py-2">
+                        <div className="font-semibold text-slate-800 dark:text-slate-200 truncate">{lesson.title || `Lesson ${lessonIdx + 1}`}</div>
+                        <div className="text-xs px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">{slides.length} slides</div>
+                      </div>
+                      <div className="px-2 pb-2">
+                        {slides.length === 0 && <div className="px-2 py-2 text-sm text-slate-500">No slides</div>}
+                        {slides.map((slide, slideIdx) => {
+                          const thisFlatIdx = flat.findIndex((p) => p.lessonIdx === lessonIdx && p.slideIdx === slideIdx);
+                          const isActive = thisFlatIdx === flatIndex;
+                          const key = slideKey(lesson, slide, lessonIdx, slideIdx);
+                          const done = completed.has(key);
                           return (
                             <div
                               key={slide._id || `${lessonIdx}-${slideIdx}`}
                               onClick={() => handleSlideSelect(lessonIdx, slideIdx)}
-                              className={`block p-2 rounded-md cursor-pointer transition-colors ${
-                                isActive
-                                  ? "bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-semibold"
-                                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700"
+                              className={`px-3 py-2 rounded-lg cursor-pointer transition-colors mb-1 ${
+                                isActive ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-200 font-semibold"
+                                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60"
                               }`}
-                              title={label}
                             >
-                              {label}
+                              <div className="flex items-center justify-between">
+                                <div className="truncate">
+                                  {slide.title || (slide.quiz ? `Quiz: ${(slide.quiz.question || "").slice(0, 24)}…` : `Slide ${slideIdx + 1}`)}
+                                </div>
+                                {done && <span className="ml-3 text-emerald-600">✔</span>}
+                              </div>
                             </div>
                           );
                         })}
                       </div>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* quiz modal */}
-      {isQuizModalOpen && activeSlide?.quiz && (
-        <div className="fixed inset-0 bg-gray-900/80 z-[90] flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-white dark:bg-slate-800 rounded-xl shadow-xl p-6 md:p-8 relative">
-            <button
-              onClick={handleCloseQuizModal}
-              className="absolute top-4 right-4 text-gray-500 hover:text-red-500"
-              aria-label="Close quiz"
-            >
-              <XCircleIcon size={24} />
-            </button>
-
-            <h2 className="text-2xl font-bold mb-6 text-slate-800 dark:text-slate-100">
-              {activeSlide.quiz.question}
-            </h2>
-
-            {isFinalExamLesson && (isFinalExamPassed || hasPassedFinalExamBefore) ? (
-              <div className="mt-4 p-4 rounded-lg bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300">
-                <p className="font-semibold">
-                  You have passed the final exam! You can download your certificate from your
-                  dashboard.
-                </p>
+        {/* FULLSCREEN OVERLAY */}
+        {isFullscreen && (
+          <div
+            ref={fsWrapRef}
+            className="fixed inset-0 z-[100] bg-black"
+            onMouseMove={showOverlayNow}
+          >
+            {/* Center frame */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              {/* Outer premium frame (OUTSIDE the slide) */}
+              <div ref={fsFrameRef} className="relative p-3 rounded-2xl">
+                {/* Glow frame */}
+                <div
+                  className="pointer-events-none absolute -inset-2 rounded-2xl"
+                  style={{ boxShadow: "0 0 0 2px rgba(59,130,246,0.9), 0 14px 60px rgba(0,0,0,0.5), 0 0 80px rgba(59,130,246,0.28)" }}
+                />
+                {/* Slide with CSS scale */}
+                <div
+                  ref={fsSlideRef}
+                  className="origin-center rounded-xl overflow-hidden shadow-[0_0_0_1px_rgba(0,0,0,0.3)_inset] bg-slate-100 dark:bg-slate-950"
+                  style={{
+                    width: `${CANVAS.W}px`,
+                    height: `${CANVAS.H}px`,
+                    backgroundColor: activeSlide?.backgroundColor || "#FFFFFF",
+                    transform: `scale(${fsScale})`,
+                  }}
+                >
+                  {(activeSlide?.elements || []).map((el, i) => renderElement(el, i))}
+                </div>
               </div>
-            ) : (
-              <>
-                {(activeSlide.quiz.type === "single-choice" ||
-                  activeSlide.quiz.type === "multiple-choice") && (
-                  <div className="space-y-3">
-                    {shuffledAnswers.map((answer) => {
-                      const checked =
-                        selectedAnswers[answer._id] || selectedAnswers.id === answer._id;
-                      return (
-                        <div
-                          key={answer._id}
-                          onClick={() =>
-                            !isQuizCompleted &&
-                            (activeSlide.quiz.type === "single-choice"
-                              ? handleSingleChoiceSelect(answer._id)
-                              : handleMultiChoiceSelect(answer._id))
-                          }
-                          className={`p-4 rounded-lg text-left transition flex items-center gap-4 cursor-pointer border-2 ${
-                            checked
-                              ? "bg-blue-100 dark:bg-blue-900/40 border-blue-500"
-                              : "bg-white dark:bg-slate-700/40 border-transparent hover:border-blue-400"
-                          }`}
-                        >
-                          <input
-                            type={activeSlide.quiz.type === "single-choice" ? "radio" : "checkbox"}
-                            readOnly
-                            checked={checked || false}
-                            className="h-5 w-5 pointer-events-none"
-                          />
-                          <span className="font-medium text-slate-700 dark:text-slate-200">
-                            {answer.text}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+            </div>
 
-                {activeSlide.quiz.type === "matching" && (
-                  <div className="space-y-4 w-full max-w-3xl mx-auto">
-                    {shuffledPrompts.map((prompt) => (
-                      <div
-                        key={prompt._id}
-                        className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3 gap-3"
+            {/* Overlay controls */}
+            <div
+              className={`pointer-events-none absolute inset-0 transition-opacity duration-300 ${
+                overlayVisible ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              {/* Top bar */}
+              <div className="pointer-events-auto absolute top-4 left-0 right-0 px-5 flex items-center justify-between">
+                <div className="hidden sm:flex items-center gap-2 text-[11px] uppercase tracking-widest text-white/70 bg-white/5 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/10">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Presentation Mode
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={recalcFsScale}
+                    className="inline-flex items-center gap-2 rounded-xl px-3 py-2 bg-white/90 hover:bg-white text-slate-900 shadow-md border border-white"
+                    title="Recalculate Fit"
+                  >
+                    <RotateCw size={18} />
+                    Fit
+                  </button>
+                  <button
+                    onClick={exitFullscreen}
+                    className="inline-flex items-center gap-2 rounded-xl px-3 py-2 bg-white/90 hover:bg-white text-slate-900 shadow-md border border-white"
+                    title="Exit Fullscreen"
+                  >
+                    <Minimize2 size={18} />
+                    Exit
+                  </button>
+                </div>
+              </div>
+
+              {/* Bottom dock */}
+              <div className="pointer-events-auto absolute bottom-6 left-1/2 -translate-x-1/2">
+                <div className="relative">
+                  {/* glowing ring */}
+                  <div className="absolute -inset-1 blur-lg rounded-2xl bg-gradient-to-r from-blue-500/30 via-fuchsia-500/30 to-emerald-500/30" />
+                  {/* glass dock */}
+                  <div className="relative flex items-center gap-3 rounded-2xl px-4 py-2.5 bg-white/10 backdrop-blur-xl border border-white/15 shadow-[0_8px_40px_rgba(0,0,0,0.35)]">
+                    <button
+                      onClick={handlePrev}
+                      disabled={isPrevDisabled}
+                      className="group disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center h-11 w-11 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 text-white transition shadow-inner"
+                      title="Previous (←)"
+                    >
+                      <ArrowLeftIcon size={18} />
+                    </button>
+
+                    <div className="px-3 py-1 text-white/80 text-sm hidden sm:block">
+                      Slide {lessonSlideNo} / {lessonSlideTotal}
+                    </div>
+
+                    <button
+                      onClick={handleNext}
+                      disabled={isNextDisabled}
+                      className="group disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center h-11 w-11 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 text-white transition shadow-inner"
+                      title="Next (→)"
+                    >
+                      <ArrowRightIcon size={18} />
+                    </button>
+
+                    <div className="w-px h-6 bg-white/20 mx-1" />
+
+                    {/* Quiz actions inside fullscreen */}
+                    {currentQuiz && !currentCompleted && (
+                      <button
+                        onClick={() => setIsQuizModalOpen(true)}
+                        className="inline-flex items-center gap-2 h-11 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow"
+                        title="Start Quiz"
                       >
-                        <label className="mr-4 font-semibold text-slate-700 dark:text-slate-300">
-                          {prompt.prompt}
-                        </label>
-                        <select
-                          onChange={(e) => handleMatchingSelect(prompt._id, e.target.value)}
-                          value={selectedAnswers[prompt._id] || ""}
-                          disabled={isQuizCompleted}
-                          className="p-2 border border-slate-300 dark:border-slate-600 rounded bg-slate-50 dark:bg-slate-700 w-48"
+                        <Eye size={18} /> Start Quiz
+                      </button>
+                    )}
+                    {currentQuiz && currentCompleted && (
+                      <>
+                        <span className="text-emerald-400 text-sm font-medium">✔ Quiz completed</span>
+                        <button
+                          onClick={() => {
+                            if (["single-choice", "multiple-choice"].includes(currentQuiz.type)) {
+                              const aStates = {};
+                              currentQuiz.answers.forEach((a) => (aStates[a._id] = a.isCorrect ? "correct" : "neutral"));
+                              setAnswerStates(aStates);
+                            } else if (currentQuiz.type === "matching") {
+                              const mStates = {};
+                              currentQuiz.prompts.forEach((p) => (mStates[p._id] = true));
+                              setMatchingStates(mStates);
+                            }
+                            setIsQuizModalOpen(true);
+                            setIsQuizCompleted(true);
+                          }}
+                          className="inline-flex items-center gap-2 h-11 px-4 rounded-xl bg-slate-900/90 hover:bg-black text-white font-semibold shadow"
+                          title="Review Quiz"
                         >
-                          <option value="" disabled>
-                            --Select--
-                          </option>
-                          {(activeSlide.quiz.matchOptions || []).map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
+                          Review
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedAnswers({});
+                            setAnswerStates({});
+                            setMatchingStates({});
+                            setQuizFeedback("");
+                            setShowExplanation(false);
+                            setIsQuizCompleted(false);
+                            setIsQuizModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-2 h-11 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold shadow"
+                          title="Retake Quiz"
+                        >
+                          Retake
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* QUIZ MODAL */}
+        {isQuizModalOpen && currentQuiz && (
+          <div className="fixed inset-0 bg-black/70 z-[120] flex items-center justify-center p-4">
+            <div className="relative w-full max-w-3xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-6">
+              <button
+                onClick={() => setIsQuizModalOpen(false)}
+                className="absolute top-3 right-3 p-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600"
+                aria-label="Close"
+              >
+                <XCircleIcon size={22} />
+              </button>
+
+              <h2 className="text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">{currentQuiz.question}</h2>
+
+              {["single-choice", "multiple-choice"].includes(currentQuiz.type) && (
+                <div className="space-y-3">
+                  {shuffledAnswers.map((a) => {
+                    const checked = currentQuiz.type === "single-choice" ? selectedAnswers.id === a._id : !!selectedAnswers[a._id];
+                    const state = answerStates[a._id] || "neutral";
+                    const stateCls =
+                      state === "correct" ? "border-green-500 bg-green-50"
+                      : state === "wrong-selected" ? "border-rose-500 bg-rose-50"
+                      : state === "missed-correct" ? "border-amber-500 bg-amber-50"
+                      : "border-slate-200 dark:border-slate-700";
+                    return (
+                      <label key={a._id} className={`flex items-center gap-3 p-3 rounded-xl border ${stateCls} cursor-pointer transition`}>
+                        <input
+                          type={currentQuiz.type === "single-choice" ? "radio" : "checkbox"}
+                          checked={checked}
+                          onChange={() =>
+                            currentQuiz.type === "single-choice"
+                              ? onSingleChange(a._id)
+                              : onMultiChange(a._id)
+                          }
+                          className="h-5 w-5"
+                        />
+                        <span className="text-slate-800 dark:text-slate-200">{a.text}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              {currentQuiz.type === "matching" && (
+                <div className="space-y-4">
+                  {shuffledPrompts.map((p) => {
+                    const ok = matchingStates[p._id];
+                    return (
+                      <div key={p._id} className={`flex items-center justify-between gap-4 p-3 rounded-xl border ${ok ? "border-green-500 bg-green-50" : "border-slate-200 dark:border-slate-700"}`}>
+                        <div className="font-medium text-slate-800 dark:text-slate-200">{p.prompt}</div>
+                        <select
+                          disabled={isQuizCompleted}
+                          value={selectedAnswers[p._id] || ""}
+                          onChange={(e) => handleMatch(p._id, e.target.value)}
+                          className="p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                        >
+                          <option value="" disabled>-- Select --</option>
+                          {currentQuiz.matchOptions.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
                         </select>
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                {quizFeedback && (
-                  <div
-                    className={`mt-6 p-3 rounded-lg text-white font-semibold flex items-center gap-2 max-w-lg mx-auto ${
-                      isQuizCompleted ? (quizFeedback.startsWith("Congrat") ? "bg-green-500" : "bg-red-500") : "bg-blue-600"
-                    }`}
-                  >
-                    {quizFeedback.startsWith("Correct") || quizFeedback.startsWith("Congrat") ? (
-                      <CheckCircleIcon />
-                    ) : (
-                      <XCircleIcon />
-                    )}
-                    <span>{quizFeedback}</span>
-                  </div>
-                )}
-
-                {showExplanation && activeSlide.quiz.explanation && (
-                  <div className="mt-4 p-3 rounded-lg bg-slate-100 dark:bg-slate-700 text-sm text-slate-700 dark:text-slate-200 max-w-lg mx-auto">
-                    <b className="block mb-1">Explanation:</b>
-                    {activeSlide.quiz.explanation}
-                  </div>
-                )}
-
-                <div className="mt-6 text-center">
-                  {isFinalExamLesson ? (
-                    <button
-                      onClick={handleFinalExamSubmit}
-                      disabled={isFinalExamPassed || hasPassedFinalExamBefore || isQuizCompleted}
-                      className="bg-green-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-green-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 transition shadow-lg"
-                    >
-                      Submit Final Exam
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleQuizSubmit}
-                      disabled={isQuizCompleted}
-                      className="bg-green-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-green-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 transition shadow-lg"
-                    >
-                      Submit Answer
-                    </button>
-                  )}
+                    );
+                  })}
                 </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+              )}
 
-      {/* certificate modal */}
-      {showCertificateModal && (
-        <div className="fixed inset-0 bg-gray-900/80 flex items-center justify-center p-4 z-[99]">
-          <div className="relative w-full max-w-5xl h-3/4 bg-white dark:bg-slate-800 rounded-xl shadow-2xl p-6 md:p-10 text-center flex flex-col items-center justify-center overflow-auto">
-            <button
-              onClick={closeCertificateModal}
-              className="absolute top-4 right-4 p-2 bg-red-500 rounded-full text-white hover:bg-red-600 transition-colors"
-              aria-label="Close certificate"
-            >
-              <XCircleIcon size={28} />
-            </button>
+              {quizFeedback && (
+                <div className={`mt-5 px-4 py-3 rounded-xl font-semibold ${quizFeedback.startsWith("Correct") ? "bg-green-600 text-white" : "bg-rose-600 text-white"}`}>
+                  {quizFeedback}
+                </div>
+              )}
 
-            <div
-              ref={certificateRef}
-              className="w-full h-full p-8 md:p-12 flex flex-col items-center justify-center text-center bg-white dark:bg-slate-800 border-8 border-blue-600 dark:border-blue-400 rounded-md"
-            >
-              <h1 className="text-4xl md:text-6xl font-bold mb-4 text-blue-600 dark:text-blue-400">
-                Certificate of Completion
-              </h1>
-              <p className="text-xl md:text-2xl mt-2 text-gray-700 dark:text-gray-300">
-                This is to certify that
-              </p>
-              <h2 className="text-4xl md:text-5xl font-bold my-4 md:my-8 text-black dark:text-white">
-                {user?.name}
-              </h2>
-              <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400">
-                ID: {user?.idNumber}
-              </p>
-              <p className="text-xl md:text-2xl mt-8 text-gray-700 dark:text-gray-300">
-                has successfully completed the course
-              </p>
-              <h3 className="text-3xl md:text-4xl font-semibold my-4 text-gray-800 dark:text-gray-200">
-                {course?.title}
-              </h3>
-              <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400">
-                on {new Date().toLocaleDateString()}
-              </p>
-              <div className="mt-8 md:mt-12 text-lg md:text-2xl text-gray-700 dark:text-gray-300">
-                <p>_______________________</p>
-                <p className="mt-2">POCUS World Instructor</p>
-                <p className="text-base md:text-lg">{course?.creator?.fullName}</p>
+              {showExplanation && currentQuiz.explanation && (
+                <div className="mt-3 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                  <strong className="block mb-1">Explanation:</strong>
+                  {currentQuiz.explanation}
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-wrap gap-3 justify-end">
+                <button onClick={() => setIsQuizModalOpen(false)} className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-slate-700">
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    if (!currentQuiz) return;
+                    if (["single-choice", "multiple-choice"].includes(currentQuiz.type)) {
+                      const aStates = {};
+                      currentQuiz.answers.forEach((a) => (aStates[a._id] = a.isCorrect ? "correct" : "neutral"));
+                      setAnswerStates(aStates);
+                    } else if (currentQuiz.type === "matching") {
+                      const mStates = {};
+                      currentQuiz.prompts.forEach((p) => (mStates[p._id] = true));
+                      setMatchingStates(mStates);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white"
+                >
+                  Reveal Answer
+                </button>
+                {!isQuizCompleted ? (
+                  <button onClick={submitQuiz} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white">
+                    Submit Answer
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setSelectedAnswers({});
+                      setAnswerStates({});
+                      setMatchingStates({});
+                      setQuizFeedback("");
+                      setShowExplanation(false);
+                      setIsQuizCompleted(false);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-black text-white"
+                  >
+                    Retake
+                  </button>
+                )}
               </div>
             </div>
-
-            <button
-              onClick={generateAndSaveCertificate}
-              className="mt-6 inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition shadow-lg"
-            >
-              <Download size={20} /> Download & Save Certificate
-            </button>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* CERTIFICATE MODAL */}
+        {showCertificateModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[110]">
+            <div className="relative w-full max-w-5xl h-3/4 rounded-2xl border border-slate-700 bg-slate-900 text-white shadow-2xl p-6 md:p-12 text-center flex flex-col items-center justify-center overflow-auto">
+              <button onClick={() => setShowCertificateModal(false)} className="absolute top-4 right-4 p-2 rounded-full bg-rose-600 hover:bg-rose-700 transition-colors">
+                <XCircleIcon size={30} />
+              </button>
+
+              <CertificateCard ref={certificateRef} user={user} course={course} idDisplay={userIdDisplay} />
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={async () => {
+                    if (!certificateRef.current) return;
+                    const canvas = await html2canvas(certificateRef.current, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#ffffff" });
+                    canvas.toBlob((blob) => {
+                      saveAs(blob, `certificate-${(course.title || "").replace(/\s+/g, "-")}-${userIdDisplay}.png`);
+                    });
+                  }}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold shadow-lg"
+                >
+                  <Download size={20} /> Download Certificate
+                </button>
+
+                <button
+                  onClick={async () => {
+                    if (!certificateRef.current) return;
+                    const canvas = await html2canvas(certificateRef.current, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#ffffff" });
+                    await saveCertificateToDashboard(canvas);
+                  }}
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-semibold shadow-lg"
+                >
+                  Save to Dashboard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
-};
+}
 
-export default LessonView;
+/* -------------------- CERTIFICATE CARD -------------------- */
+const CertificateCard = React.forwardRef(function CertificateCard({ user, course, idDisplay }, ref) {
+  return (
+    <div
+      ref={ref}
+      className="w-full h-full p-8 md:p-12 flex flex-col items-center justify-center text-center bg-slate-50 text-slate-900 border-8 border-blue-600 rounded-xl"
+    >
+      <h1 className="text-4xl md:text-6xl font-extrabold mb-4 text-blue-700">Certificate of Completion</h1>
+      <p className="text-xl md:text-2xl mt-4">This is to certify that</p>
+      <h2 className="text-4xl md:text-5xl font-bold my-4 md:my-8">{user?.name || "Student"}</h2>
+
+      <div className="mt-2 px-4 py-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-lg md:text-xl font-semibold">
+        ID: {idDisplay}
+      </div>
+
+      <p className="text-xl md:text-2xl mt-8">has successfully completed the course</p>
+      <h3 className="text-3xl md:text-4xl font-semibold my-4">{course?.title}</h3>
+      <p className="text-lg md:text--xl">on {new Date().toLocaleDateString()}</p>
+      <div className="mt-8 md:mt-12 text-lg md:text-2xl">
+        <p>_______________________</p>
+        <p className="mt-2">POCUS World Instructor</p>
+        <p className="text-base md:text-lg">{course?.creator?.fullName}</p>
+      </div>
+    </div>
+  );
+});
