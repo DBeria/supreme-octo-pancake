@@ -156,6 +156,31 @@ export default function LessonView() {
   const fsFrameRef = useRef(null);
   const fsSlideRef = useRef(null);
   const overlayTimerRef = useRef(null);
+  // responsive scale for NORMAL (non-fullscreen) mode
+  const [normScale, setNormScale] = useState(1);
+  const normWrapRef = useRef(null);
+  const normSlideRef = useRef(null);
+
+  const recalcNormScale = useCallback(() => {
+    if (!normWrapRef.current) return;
+    const wrapW = normWrapRef.current.clientWidth;
+    const P = 24; // padding guard
+    const availW = Math.max(200, wrapW - P * 2);
+    const scale = Math.min(1, availW / CANVAS.W);
+    setNormScale(scale > 0 ? scale : 1);
+  }, []);
+
+  useEffect(() => {
+    recalcNormScale();
+    const onResize = () => recalcNormScale();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [recalcNormScale]);
+
+  useEffect(() => {
+    requestAnimationFrame(recalcNormScale);
+  }, [pos.lessonIdx, pos.slideIdx, recalcNormScale]);
+
 
   // load course/user
   useEffect(() => {
@@ -585,7 +610,7 @@ export default function LessonView() {
 
   /* -------------------- MAIN RENDER -------------------- */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-900 dark:via-slate-950 dark:to-black">
+    <div className="lessonview-root min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-900 dark:via-slate-950 dark:to-black">
       {/* Header */}
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 backdrop-blur shadow-lg p-6">
@@ -622,25 +647,35 @@ export default function LessonView() {
               <div className="p-3 md:p-5">
                 {hasAnySlides ? (
                   <>
-                    <div className="w-full flex justify-center">
-                      {/* Outer frame OUTSIDE the slide */}
-                      <div className="relative p-3 rounded-2xl">
-                        <div className="pointer-events-none absolute -inset-2 rounded-2xl bg-transparent"
-                             style={{ boxShadow: "0 0 0 2px rgba(59,130,246,0.8), 0 10px 30px rgba(0,0,0,0.25), 0 0 50px rgba(59,130,246,0.2)" }} />
-                        {/* Slide */}
-                        <div
-                          className="relative rounded-xl overflow-hidden shadow-inner bg-slate-100 dark:bg-slate-950"
-                          style={{
-                            width: `${CANVAS.W}px`,
-                            height: `${CANVAS.H}px`,
-                            backgroundColor: activeSlide?.backgroundColor || "#FFFFFF",
-                          }}
-                        >
-                          {(activeSlide?.elements || []).map((el, i) => renderElement(el, i))}
-                        </div>
-                      </div>
-                    </div>
 
+<div className="w-full">
+  {/* Wrapper that measures available width and centers content */}
+  <div ref={normWrapRef} className="relative w-full max-w-full mx-auto flex justify-center">
+    {/* Outer frame OUTSIDE the slide */}
+    <div className="relative p-3 rounded-2xl">
+      <div
+        className="pointer-events-none absolute -inset-2 rounded-2xl bg-transparent"
+        style={{ boxShadow: "0 0 0 2px rgba(59,130,246,0.8), 0 10px 30px rgba(0,0,0,0.25), 0 0 50px rgba(59,130,246,0.2)" }}
+      />
+      {/* Slide scaled to fit container width */}
+      <div
+        ref={normSlideRef}
+        className="relative rounded-xl overflow-hidden shadow-inner bg-slate-100 dark:bg-slate-950 origin-top"
+        style={{
+          width: `${CANVAS.W}px`,
+          height: `${CANVAS.H}px`,
+          backgroundColor: activeSlide?.backgroundColor || "#FFFFFF",
+          transform: `scale(${normScale})`,
+          transformOrigin: "top center",
+        }}
+      >
+        {(activeSlide?.elements || []).map((el, i) => renderElement(el, i))}
+      </div>
+      {/* Spacer to preserve layout height equal to scaled slide height */}
+      <div aria-hidden style={{ height: `${CANVAS.H * normScale}px` }} />
+    </div>
+  </div>
+</div>
                     {/* Dots (per-lesson) */}
                     <div className="mt-4 flex flex-wrap gap-1.5 justify-center">
                       {Array.from({ length: lessonSlideTotal }).map((_, i) => (
