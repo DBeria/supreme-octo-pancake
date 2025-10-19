@@ -2,41 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
-/* --- Mobile zoom / text inflation guards --- */
+/* --- Global anti-zoom & layout guards --- */
 html, body {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
 
-/* iOS zooms when form controls have font-size < 16px */
-input, select, textarea, button {
-  font-size: 16px;
-}
+/* Keep base at browser default so the whole site doesn't feel zoomed */
+html { font-size: 16px; }
 
-/* Make sure no global transform/zoom sneaks in */
-html, body, #root {
-  transform: none !important;
-}
+/* Prevent accidental global scaling/overflow that can look like zoom */
+html, body, #root { transform: none !important; }
+body { overflow-x: hidden; }
 
-/* Responsive media (prevents layout overflow -> accidental zoom) */
-img, video, canvas {
-  max-width: 100%;
-  height: auto;
-}
+/* iOS zooms inputs < 16px on focus */
+input, select, textarea, button { font-size: 16px; }
+
+/* Responsive media to avoid overflow-triggered zoom */
+img, video, canvas { max-width: 100%; height: auto; }
 
 /* Your original styles */
 body {
   font-family: 'Inter', sans-serif;
-  background-color: #f7fafc; /* bg-gray-100 */
-  color: #1f2937; /* text-gray-800 */
-  transition-property: background-color, color;
-  transition-duration: 300ms;
-}
-
-/* Dark mode for body when using a .dark parent class */
-.dark body {
-  background-color: #0f172a; /* slate-900 */
-  color: #e5e7eb; /* text-gray-200 */
+  @apply bg-gray-100 dark:bg-slate-900 text-gray-800 dark:text-gray-200 transition-colors duration-300;
 }
 
 /* Custom scrollbar for a more modern look */
@@ -49,47 +37,3 @@ body {
 .dark ::-webkit-scrollbar-track { background: #1e293b; }
 .dark ::-webkit-scrollbar-thumb { background: #4b5563; }
 .dark ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
-
-
-
-/* ===== LessonView anti-zoom fixes (scoped) ===== */
-.lessonview-root,
-.lessonview-root * {
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
-}
-
-/* iOS will zoom when form controls are < 16px */
-.lessonview-root input,
-.lessonview-root select,
-.lessonview-root textarea,
-.lessonview-root button {
-  font-size: 16px; /* prevent auto-zoom on focus */
-}
-
-/* Kill accidental global scaling on the page container */
-.lessonview-root {
-  transform: none !important;
-}
-
-/* Make media responsive so it doesn't overflow and trigger layout zoom */
-.lessonview-root img,
-.lessonview-root video,
-.lessonview-root canvas,
-.lessonview-root iframe,
-.lessonview-root object,
-.lessonview-root embed {
-  max-width: 100%;
-  height: auto;
-}
-
-/* If the lesson content uses prose or big headings, keep it sensible on mobile */
-.lessonview-root .prose {
-  font-size: 1rem;           /* 16px */
-  line-height: 1.625;        /* comfortable reading */
-}
-@media (min-width: 640px) {
-  .lessonview-root .prose {
-    font-size: 1.0625rem;    /* 17px on sm+ */
-  }
-}
