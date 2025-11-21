@@ -13,65 +13,90 @@ function stripHtml(s = '') {
   return s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * sendEmail(options)
+ *
+ * Supports both:
+ *  - { to, subject, html, text, from, replyTo }
+ *  - { email, subject, message }  // legacy usage
+ *
+ * Reads env in this order:
+ *  SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM
+ *  fallback to EMAIL_HOST / EMAIL_PORT / EMAIL_USER / EMAIL_PASS / EMAIL_FROM
+ */
 async function sendEmail(options = {}) {
-  // Accept both new and legacy call signatures
-  const to       = options.to || options.email; // compatibility
-  const subject  = options.subject || options.title || '(no subject)';
-  const html     = options.html || options.messageHtml || undefined;
-  const text     = options.text || (html ? stripHtml(html) : options.message || undefined);
-  const replyTo  = options.replyTo || undefined;
+  let {
+    to,
+    email,       // legacy
+    subject,
+    html,
+    text,
+    message,     // legacy (plain text)
+    from,
+    replyTo,
+  } = options;
 
-  if (!to) throw new Error('sendEmail: no recipient provided (expected options.to or options.email)');
-
-  // Prefer SMTP_* but fall back to EMAIL_* so your existing .env still works
-  const host     = pickEnv('SMTP_HOST', 'EMAIL_HOST');
-  const portRaw  = pickEnv('SMTP_PORT', 'EMAIL_PORT');
-  const port     = Number(portRaw || 587);             // Mailtrap Sending uses 587 (STARTTLS)
-  const user     = pickEnv('SMTP_USER', 'EMAIL_USER');
-  const pass     = pickEnv('SMTP_PASS', 'EMAIL_PASS');
-  const from     = pickEnv('MAIL_FROM', 'EMAIL_FROM') || 'POCUS World <support@pocusworld.com>';
-
-  if (!host || !port || !user || !pass) {
-    throw new Error('Email transport not configured: missing SMTP/EMAIL host/port/user/pass envs');
+  // Normalize options
+  to = to || email;
+  if (!to) {
+    throw new Error('sendEmail: "to" / "email" is required');
   }
 
-  // Helpful guard: warn if someone wired Sandbox instead of Sending
-  // Sandbox host is usually "smtp.mailtrap.io" (captures only, won’t deliver to Gmail).
-  if (host.includes('smtp.mailtrap.io')) {
-    console.warn('[MAIL] You are using Mailtrap *Sandbox* host. Messages will NOT deliver to Gmail.');
-    console.warn('[MAIL] For real delivery, use Mailtrap *Sending*: host = send.smtp.mailtrap.io, port = 587.');
+  subject = subject || 'No subject';
+
+  if (!text && message) {
+    text = message;
   }
 
-  const secure = port === 465; // 465 = implicit SSL, 587 = STARTTLS
+  if (!text && html) {
+    text = stripHtml(html);
+  }
+
+  const host = pickEnv('SMTP_HOST', 'EMAIL_HOST') || 'smtp.gmail.com';
+  const port = Number(pickEnv('SMTP_PORT', 'EMAIL_PORT') || 587);
+  const user = pickEnv('SMTP_USER', 'EMAIL_USER');
+  const pass = pickEnv('SMTP_PASS', 'EMAIL_PASS');
+
+  if (!user || !pass) {
+    console.warn(
+      '[MAIL] SMTP/EMAIL user or pass not set. host=%s port=%s user=%s',
+      host,
+      port,
+      user
+    );
+  }
 
   const transporter = nodemailer.createTransport({
     host,
     port,
-    secure,
-    auth: { user, pass },
-    // Helps avoid weird TLS mismatches in some environments
-    tls: { minVersion: 'TLSv1.2' },
+    secure: port === 465, // true for 465, false otherwise
+    auth: user && pass ? { user, pass } : undefined,
+    pool: true,
+    connectionTimeout: 10000, // 10 seconds
+    socketTimeout: 10000,
   });
 
-  // Optional verification in dev
-  if (process.env.NODE_ENV !== 'production') {
-    try {
-      await transporter.verify();
-      // console.log('[MAIL] SMTP transporter verified for', host, 'port', port);
-    } catch (e) {
-      console.error('[MAIL] transporter verify failed:', e?.message || e);
-    }
-  }
+  const fromAddress =
+    from ||
+    pickEnv('EMAIL_FROM', 'SMTP_FROM') ||
+    (user ? `"POCUS World" <${user}>` : undefined);
 
-  const mail = { from, to, subject, replyTo };
-  if (html) mail.html = html;
-  if (text) mail.text = text;
+  const mailOptions = {
+    from: fromAddress,
+    to,
+    subject,
+    text,
+  };
 
-  const info = await transporter.sendMail(mail);
+  if (html) mailOptions.html = html;
+  if (replyTo) mailOptions.replyTo = replyTo;
+
+  const info = await transporter.sendMail(mailOptions);
 
   if (process.env.NODE_ENV !== 'production') {
     console.log('[MAIL] sent ->', info.messageId, 'to:', to);
   }
+
   return info;
 }
 

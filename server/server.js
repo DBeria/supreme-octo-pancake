@@ -12,23 +12,11 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware.js');
 connectDB();
 
 const app = express();
-
-const allowedOrigins = (process.env.CORS_ORIGINS || '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
-
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin) return callback(null, true); // allow tools/server-to-server
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error(`CORS: Origin not allowed: ${origin}`));
-  },
-  credentials: true,
-}));
-
+app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 const courseRoutes = require('./routes/courses.js');
