@@ -146,7 +146,7 @@ exports.updatePassword = async (req, res) => {
             res.status(401).json({ message: 'Invalid current password' });
         }
     } catch (error) {
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ message: 'Please try again later' });
     }
 };
 

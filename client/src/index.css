@@ -2,38 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
-/* --- Global anti-zoom & layout guards --- */
-html, body {
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
+/* ===== Global 20% zoom-out =====
+   Change 0.80 to 0.85 (15%), 0.75 (25%), etc.
+*/
+html { zoom: 0.80; }  /* Chrome/Edge/Safari */
+
+/* Firefox fallback (no zoom support) */
+@-moz-document url-prefix() {
+  html {
+    transform: scale(0.80);
+    transform-origin: top left;
+    width: 125vw;         /* 1 / 0.80 */
+  }
+  body { overflow-x: hidden; }
 }
 
-/* Keep base at browser default so the whole site doesn't feel zoomed */
+/* Keep text-size behavior sane on iOS */
+html, body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 html { font-size: 16px; }
 
-/* Prevent accidental global scaling/overflow that can look like zoom */
-html, body, #root { transform: none !important; }
-body { overflow-x: hidden; }
-
-/* iOS zooms inputs < 16px on focus */
-input, select, textarea, button { font-size: 16px; }
-
-/* Responsive media to avoid overflow-triggered zoom */
-img, video, canvas { max-width: 100%; height: auto; }
-
-/* Your original styles */
+/* Theme */
 body {
   font-family: 'Inter', sans-serif;
   @apply bg-gray-100 dark:bg-slate-900 text-gray-800 dark:text-gray-200 transition-colors duration-300;
 }
 
-/* Custom scrollbar for a more modern look */
+/* Media defaults */
+img, video, canvas { max-width: 100%; height: auto; }
+input, select, textarea, button { font-size: 16px; }
+
+/* Scrollbar styling */
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: #f1f1f1; }
 ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #555; }
-
-/* Dark mode scrollbar styles */
 .dark ::-webkit-scrollbar-track { background: #1e293b; }
 .dark ::-webkit-scrollbar-thumb { background: #4b5563; }
 .dark ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
